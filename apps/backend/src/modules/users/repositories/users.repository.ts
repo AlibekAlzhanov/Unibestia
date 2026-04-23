@@ -10,9 +10,7 @@ export class UsersRepository {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     @InjectRepository(UserRole)
-    private readonly userRolesRepo: Repository<UserRole>,
-    @InjectRepository(Role)
-    private readonly rolesRepo: Repository<Role>
+    private readonly userRolesRepo: Repository<UserRole>
   ) {}
 
   async findById(id: string): Promise<User | null> {

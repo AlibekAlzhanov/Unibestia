@@ -15,10 +15,8 @@ import { AuthService } from "@repo/services";
 import { TRPCService } from "./trpc.service.js";
 import { TRPCPanelController } from "./trpc-panel.controller.js";
 import { AppRouterClass } from "./routers/index.js";
-import { BasicRouter } from "./routers/routers/basic.router.js";
 import { AuthRouter } from "./routers/routers/auth.router.js";
 import { CatalogRouter } from "./routers/routers/catalog.router.js";
-import { ChatRoomRouter } from "./routers/routers/chatroom.router.js";
 import { ProfileRouter } from "./routers/routers/profile.router.js";
 
 @Module({
@@ -40,11 +38,9 @@ import { ProfileRouter } from "./routers/routers/profile.router.js";
   providers: [
     TRPCService,
     AppRouterClass,
-    BasicRouter,
     AuthRouter,
     ProfileRouter,
     CatalogRouter,
-    ChatRoomRouter,
     AuthService,
   ],
   exports: [TRPCService],
