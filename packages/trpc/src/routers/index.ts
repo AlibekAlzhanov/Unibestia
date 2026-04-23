@@ -4,13 +4,17 @@ import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import { AuthRouter } from "./routers/auth.router.js";
 import { CatalogRouter } from "./routers/catalog.router.js";
 import { ProfileRouter } from "./routers/profile.router.js";
+import { RedemptionsRouter } from "./routers/redemptions.router.js";
+import { WalletRouter } from "./routers/wallet.router.js";
 
 @Injectable()
 export class AppRouterClass {
   constructor(
     private readonly authRouter: AuthRouter,
     private readonly catalogRouter: CatalogRouter,
-    private readonly profileRouter: ProfileRouter
+    private readonly profileRouter: ProfileRouter,
+    private readonly walletRouter: WalletRouter,
+    private readonly redemptionsRouter: RedemptionsRouter
   ) {}
 
   public createRouter() {
@@ -18,6 +22,8 @@ export class AppRouterClass {
       auth: this.authRouter.router,
       profile: this.profileRouter.router,
       catalog: this.catalogRouter.router,
+      wallet: this.walletRouter.router,
+      redemptions: this.redemptionsRouter.router,
     });
   }
 

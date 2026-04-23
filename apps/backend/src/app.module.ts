@@ -1,7 +1,11 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { DatabaseModule } from "@repo/db";
-import { CatalogModule, OffersModule } from "@repo/domain-services";
+import {
+  CatalogModule,
+  RedemptionsModule,
+  WalletsModule,
+} from "@repo/domain-services";
 import { AuthModule, RedisModule, WebhooksModule } from "@repo/services";
 import { AppConfigModule } from "./config/app-config.module.js";
 
@@ -21,8 +25,9 @@ import { HealthModule } from "./health/health.module.js";
     PostHogModule,
     AppConfigModule,
     AuthModule,
-    OffersModule,
     CatalogModule,
+    WalletsModule,
+    RedemptionsModule,
     WebsocketsModule,
     WebhooksModule,
     HealthModule,

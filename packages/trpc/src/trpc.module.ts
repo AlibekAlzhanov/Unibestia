@@ -10,7 +10,11 @@ import {
   User,
   UserRole,
 } from "@repo/db";
-import { CatalogModule } from "@repo/domain-services";
+import {
+  CatalogModule,
+  RedemptionsModule,
+  WalletsModule,
+} from "@repo/domain-services";
 import { AuthService } from "@repo/services";
 import { TRPCService } from "./trpc.service.js";
 import { TRPCPanelController } from "./trpc-panel.controller.js";
@@ -18,6 +22,8 @@ import { AppRouterClass } from "./routers/index.js";
 import { AuthRouter } from "./routers/routers/auth.router.js";
 import { CatalogRouter } from "./routers/routers/catalog.router.js";
 import { ProfileRouter } from "./routers/routers/profile.router.js";
+import { RedemptionsRouter } from "./routers/routers/redemptions.router.js";
+import { WalletRouter } from "./routers/routers/wallet.router.js";
 
 @Module({
   imports: [
@@ -26,6 +32,8 @@ import { ProfileRouter } from "./routers/routers/profile.router.js";
     }),
     PostHogModule,
     CatalogModule,
+    WalletsModule,
+    RedemptionsModule,
     TypeOrmModule.forFeature([
       User,
       UserRole,
@@ -41,6 +49,8 @@ import { ProfileRouter } from "./routers/routers/profile.router.js";
     AuthRouter,
     ProfileRouter,
     CatalogRouter,
+    WalletRouter,
+    RedemptionsRouter,
     AuthService,
   ],
   exports: [TRPCService],
