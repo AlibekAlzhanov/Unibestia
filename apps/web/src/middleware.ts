@@ -1,28 +1,42 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-// Create route matchers for protected routes
-const publicRoutes = createRouteMatcher(["/", "/sign-in", "/sign-up"]);
-const ignoredRoutes = createRouteMatcher(["/api/trpc"]);
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/login(.*)",
+  "/register(.*)",
+]);
+
+const isStudentRoute = createRouteMatcher([
+  "/home(.*)",
+  "/catalog(.*)",
+  "/offer(.*)",
+  "/profile(.*)",
+  "/wallet(.*)",
+  "/my-redemptions(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
-  // If the request is for a public route, don't enforce authentication
-  if (publicRoutes(req)) {
-    return;
+  const { userId } = await auth();
+
+  if (userId && req.nextUrl.pathname === "/") {
+    return NextResponse.redirect(new URL("/home", req.url));
   }
 
-  // If the request is for an ignored route, don't enforce authentication
-  if (ignoredRoutes(req)) {
-    return;
+  if (!userId && isStudentRoute(req)) {
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // For all other routes, protect them
-  await auth.protect();
+  if (userId && isPublicRoute(req) && req.nextUrl.pathname !== "/") {
+    return NextResponse.redirect(new URL("/home", req.url));
+  }
+
+  return NextResponse.next();
 });
 
 export const config = {
-  // Matches all paths except for
-  // - Files in the public directory
-  // - _next directory
-  // - favicon.ico, etc.
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: [
+    "/((?!_next|[^?]*\.(?:html?|css|js(?!on)|jpe?g|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)(.*)",
+  ],
 };

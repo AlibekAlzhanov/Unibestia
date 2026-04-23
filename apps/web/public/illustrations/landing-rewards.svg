@@ -1,0 +1,22 @@
+<svg width="620" height="500" viewBox="0 0 620 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="620" height="500" rx="28" fill="#FFF9F2"/>
+  <circle cx="128" cy="104" r="50" fill="#FDF5DF"/>
+  <circle cx="502" cy="106" r="58" fill="#EEF9F8"/>
+  <rect x="86" y="122" width="448" height="256" rx="30" fill="white" stroke="#E5ECE9" stroke-width="2"/>
+  <rect x="112" y="152" width="170" height="32" rx="16" fill="#FFF0EE"/>
+  <text x="132" y="173" fill="#1F2937" font-family="Arial, sans-serif" font-size="14" font-weight="600">Бонусный кошелёк</text>
+  <text x="112" y="231" fill="#1F2937" font-family="Arial, sans-serif" font-size="44" font-weight="700">320</text>
+  <text x="112" y="258" fill="#6B7280" font-family="Arial, sans-serif" font-size="15">доступно бонусов</text>
+  <rect x="112" y="282" width="152" height="20" rx="10" fill="#E7EFEC"/>
+  <rect x="112" y="318" width="124" height="14" rx="7" fill="#EDF3F0"/>
+  <rect x="356" y="156" width="146" height="82" rx="24" fill="#EEF9F8"/>
+  <text x="376" y="188" fill="#6B7280" font-family="Arial, sans-serif" font-size="13">Накоплено</text>
+  <text x="376" y="218" fill="#1F2937" font-family="Arial, sans-serif" font-size="28" font-weight="700">+1 280</text>
+  <rect x="356" y="262" width="146" height="82" rx="24" fill="#FFF0EE"/>
+  <text x="376" y="294" fill="#6B7280" font-family="Arial, sans-serif" font-size="13">Потрачено</text>
+  <text x="376" y="324" fill="#1F2937" font-family="Arial, sans-serif" font-size="28" font-weight="700">960</text>
+  <rect x="150" y="389" width="112" height="56" rx="20" fill="white" stroke="#E5ECE9" stroke-width="2"/>
+  <text x="172" y="423" fill="#1F2937" font-family="Arial, sans-serif" font-size="20" font-weight="700">-20%</text>
+  <rect x="356" y="389" width="118" height="56" rx="20" fill="white" stroke="#E5ECE9" stroke-width="2"/>
+  <text x="377" y="423" fill="#1F2937" font-family="Arial, sans-serif" font-size="20" font-weight="700">Coffee</text>
+</svg>
