@@ -1,0 +1,32 @@
+{
+  "extends": "@repo/typescript-config/base",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2022",
+    "sourceMap": true,
+    "outDir": "./dist",
+
+    "rootDir": "./src",   // ✅ ДОБАВИЛИ
+    "baseUrl": "./",
+
+    "incremental": true,
+    "skipLibCheck": true,
+    "types": ["node", "jest"],
+    "noImplicitAny": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "preserveSymlinks": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "src/@generated"]
+}

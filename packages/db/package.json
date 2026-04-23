@@ -1,0 +1,64 @@
+{
+  "name": "@repo/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint \"src/**/*.ts?(x)\"",
+    "type-check": "tsc --noEmit",
+
+    "clean": "rimraf dist",
+    "fullclean": "rimraf dist node_modules .turbo",
+
+    "typeorm": "node --loader ts-node/esm ./node_modules/typeorm/cli.js -d ./src/data-source.ts",
+
+    "migration:generate": "tsx ./scripts/generate-migration.ts",
+    "migration:run": "node --loader ts-node/esm ./node_modules/typeorm/cli.js -d ./src/data-source.ts migration:run",
+    "migration:revert": "node --loader ts-node/esm ./node_modules/typeorm/cli.js -d ./src/data-source.ts migration:revert",
+    "migration:show": "node --loader ts-node/esm ./node_modules/typeorm/cli.js -d ./src/data-source.ts migration:show",
+
+    "seed": "tsx ./src/seeds/run.ts",
+
+    "db:fresh": "pnpm migration:revert && pnpm migration:run && pnpm seed",
+    "db:reset": "pnpm migration:run && pnpm seed"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/typeorm": "^11.0.0",
+    "dotenv": "^16.5.0",
+    "pg": "^8.15.5",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.22"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.15.2",
+    "eslint": "^9.25.1",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./entities": "./dist/entities/index.js",
+    "./data-source": "./dist/data-source.js"
+  }
+}

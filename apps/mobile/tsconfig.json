@@ -1,0 +1,16 @@
+{
+  "extends": "@repo/typescript-config/react-library",
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "jsx": "react-native",
+    "paths": {
+      "@/*": ["./*"],
+      "@repo/ui/*": ["../ui/src/*"],
+      "@repo/backend/*": ["../backend/src/*"],
+      "@repo/websockets/*": ["../websockets/src/*"],
+      "@repo/trpc/*": ["../trpc/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "app.config.ts"]
+}

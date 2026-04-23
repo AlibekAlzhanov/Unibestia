@@ -1,0 +1,26 @@
+{
+  "extends": "@repo/typescript-config/nextjs",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@repo/backend/*": ["../../apps/backend/src/*"],
+      "@repo/ui/*": ["../../packages/ui/src/*"],
+      "@repo/api-client/*": ["../../packages/api-client/src/*"],
+      "@repo/websockets/*": ["../../packages/websockets/src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "../../jest.setup.ts"
+  ],
+  "exclude": ["node_modules"]
+}
