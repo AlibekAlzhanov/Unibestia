@@ -1,20 +1,201 @@
+"use client";
+
+import Link from "next/link";
 import { type JSX } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/utils/trpc";
+
+type OfferCard = {
+  id: string;
+  slug: string;
+  title: string;
+  shortDescription?: string | null;
+  discountType?: string | null;
+  discountValue?: string | null;
+  cashbackPercent?: string | null;
+  bonusRewardPoints?: number | null;
+  partner?: {
+    brandName?: string | null;
+  } | null;
+  category?: {
+    name?: string | null;
+  } | null;
+};
+
+function formatBenefit(offer: OfferCard): string {
+  if (offer.discountType === "percent" && offer.discountValue) {
+    return `-${Number(offer.discountValue).toFixed(0)}%`;
+  }
+
+  if (offer.discountType === "fixed_amount" && offer.discountValue) {
+    return `-${Number(offer.discountValue).toFixed(0)} ₸`;
+  }
+
+  if (offer.cashbackPercent) {
+    return `${Number(offer.cashbackPercent).toFixed(0)}% cashback`;
+  }
+
+  if (offer.bonusRewardPoints) {
+    return `+${offer.bonusRewardPoints} бонусов`;
+  }
+
+  return "Скидка";
+}
+
+function OfferCardView({ offer }: { offer: OfferCard }): JSX.Element {
+  return (
+    <Link
+      href={`/offer/${offer.slug}`}
+      className="group rounded-[28px] border border-[#E5ECE9] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4] hover:shadow-[0_22px_44px_rgba(15,23,42,0.08)]"
+    >
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-[#9CA3AF]">
+            {offer.partner?.brandName ?? "Партнёр"}
+          </p>
+          <h3 className="mt-1 text-lg font-bold text-[#17384B]">
+            {offer.title}
+          </h3>
+        </div>
+        <span className="shrink-0 rounded-2xl bg-[#FFF0EB] px-3 py-2 text-sm font-extrabold text-[#FF7F6E]">
+          {formatBenefit(offer)}
+        </span>
+      </div>
+
+      <p className="line-clamp-2 text-sm leading-6 text-[#6B7280]">
+        {offer.shortDescription ?? "Подробности скидки доступны в карточке."}
+      </p>
+
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <span className="rounded-xl bg-[#F7F6F1] px-3 py-1 text-xs font-bold text-[#526470]">
+          {offer.category?.name ?? "Категория"}
+        </span>
+        <span className="text-sm font-bold text-[#17384B] group-hover:text-[#FF7F6E]">
+          Смотреть →
+        </span>
+      </div>
+    </Link>
+  );
+}
 
 export default function HomePage(): JSX.Element {
+  const trpc = useTRPC();
+
+  const featuredOffersQuery = useQuery(
+    trpc.catalog.listOffers.queryOptions({
+      featuredOnly: true,
+      limit: 6,
+      offset: 0,
+    })
+  );
+
+  const newOffersQuery = useQuery(
+    trpc.catalog.listOffers.queryOptions({
+      limit: 6,
+      offset: 0,
+    })
+  );
+
+  const featuredOffers = featuredOffersQuery.data?.items ?? [];
+  const newOffers = newOffersQuery.data?.items ?? [];
+
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] flex-col gap-6 px-4 py-8 md:px-6 lg:px-8">
-      <div className="rounded-[28px] border border-[#E5ECE9] bg-white p-8 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-        <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-[#9CA3AF]">
-          UniBestie
+    <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] flex-col gap-8 px-4 py-8 md:px-6 lg:px-8">
+      <section className="rounded-[32px] bg-[#17384B] p-8 text-white shadow-[0_20px_45px_rgba(23,56,75,0.18)] md:p-10">
+        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.24em] text-[#FFB5A4]">
+          UniBestia
         </p>
-        <h1 className="text-3xl font-semibold text-[#1F2937]">
-          Добро пожаловать в личный кабинет
+        <h1 className="max-w-3xl text-3xl font-bold tracking-tight md:text-5xl">
+          Студенческие скидки, бонусы и предложения рядом с тобой
         </h1>
-        <p className="mt-3 max-w-2xl text-[#6B7280]">
-          Это временный экран для закрытой зоны. Следующим шагом сюда подключим
-          реальные блоки: новые скидки, популярные предложения и мини-кошелёк.
+        <p className="mt-4 max-w-2xl text-base leading-7 text-[#DDE8EA]">
+          Выбирай скидку, получай QR-код и показывай его сотруднику партнёра.
+          На телефоне это основной сценарий, а на компьютере сайт работает как
+          витрина и личный кабинет.
         </p>
-      </div>
+
+        <div className="mt-7 flex flex-wrap gap-3">
+          <Link
+            href="/catalog"
+            className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#f28977]"
+          >
+            Перейти в каталог
+          </Link>
+          <Link
+            href="/my-redemptions"
+            className="rounded-2xl border border-white/20 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+          >
+            Мои QR
+          </Link>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#9CA3AF]">
+              Популярное
+            </p>
+            <h2 className="mt-1 text-2xl font-bold text-[#17384B]">
+              Рекомендуемые скидки
+            </h2>
+          </div>
+          <Link href="/catalog" className="text-sm font-bold text-[#FF7F6E]">
+            Все скидки →
+          </Link>
+        </div>
+
+        {featuredOffersQuery.isLoading ? (
+          <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
+            Загружаем предложения...
+          </div>
+        ) : featuredOffersQuery.error ? (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
+            Не удалось загрузить рекомендации: {featuredOffersQuery.error.message}
+          </div>
+        ) : featuredOffers.length === 0 ? (
+          <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
+            Пока нет избранных предложений.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {featuredOffers.map((offer) => (
+              <OfferCardView key={offer.id} offer={offer} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#9CA3AF]">
+            Новое
+          </p>
+          <h2 className="mt-1 text-2xl font-bold text-[#17384B]">
+            Новые предложения
+          </h2>
+        </div>
+
+        {newOffersQuery.isLoading ? (
+          <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
+            Загружаем новые скидки...
+          </div>
+        ) : newOffersQuery.error ? (
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
+            Не удалось загрузить новые предложения: {newOffersQuery.error.message}
+          </div>
+        ) : newOffers.length === 0 ? (
+          <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
+            Пока нет опубликованных скидок.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {newOffers.map((offer) => (
+              <OfferCardView key={offer.id} offer={offer} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
