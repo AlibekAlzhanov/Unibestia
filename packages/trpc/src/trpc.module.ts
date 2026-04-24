@@ -14,6 +14,7 @@ import {
   StudentProfile,
   StudentVerification,
   University,
+  UniversityEmailDomain,
   User,
   UserRole,
 } from "@repo/db";
@@ -49,6 +50,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
       StudentProfile,
       StudentVerification,
       University,
+      UniversityEmailDomain,
       Partner,
       PartnerLocation,
       PartnerMember,

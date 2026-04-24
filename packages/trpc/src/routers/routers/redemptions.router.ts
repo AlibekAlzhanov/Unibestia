@@ -5,6 +5,9 @@ import { Repository } from "typeorm";
 import {
   PartnerMember,
   PartnerMemberRole,
+  StudentProfile,
+  UniversityEmailDomain,
+  UniversityStatus,
   User,
   UserRole,
 } from "@repo/db";
@@ -21,6 +24,10 @@ export class RedemptionsRouter {
     private readonly partnerMembersRepo: Repository<PartnerMember>,
     @InjectRepository(UserRole)
     private readonly userRolesRepo: Repository<UserRole>,
+    @InjectRepository(StudentProfile)
+    private readonly studentProfilesRepo: Repository<StudentProfile>,
+    @InjectRepository(UniversityEmailDomain)
+    private readonly universityEmailDomainsRepo: Repository<UniversityEmailDomain>,
     private readonly redemptionsService: RedemptionsService
   ) {}
 
@@ -28,6 +35,55 @@ export class RedemptionsRouter {
     return this.usersRepo.findOne({
       where: { clerkUserId },
     });
+  }
+
+  private getEmailDomain(email: string): string {
+    const normalizedEmail = email.trim().toLowerCase();
+    const parts = normalizedEmail.split("@");
+
+    if (parts.length !== 2 || !parts[1]) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Invalid user email",
+      });
+    }
+
+    return parts[1];
+  }
+
+  private async requireAllowedStudentEmailDomain(user: User): Promise<void> {
+    const domain = this.getEmailDomain(user.email);
+
+    const allowedDomain = await this.universityEmailDomainsRepo.findOne({
+      where: {
+        domain,
+        isActive: true,
+      },
+      relations: {
+        university: true,
+      },
+    });
+
+    if (
+      !allowedDomain?.university ||
+      allowedDomain.university.status !== UniversityStatus.ACTIVE
+    ) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Only approved student email domains are allowed to get QR codes",
+      });
+    }
+
+    const studentProfile = await this.studentProfilesRepo.findOne({
+      where: { userId: user.id },
+    });
+
+    if (studentProfile && studentProfile.studentEmail !== user.email) {
+      studentProfile.studentEmail = user.email;
+      studentProfile.universityId = allowedDomain.universityId;
+      await this.studentProfilesRepo.save(studentProfile);
+    }
   }
 
   private async getRoleCodesByLocalUserId(userId: string): Promise<string[]> {
@@ -117,6 +173,8 @@ export class RedemptionsRouter {
             message: "Application user not found for current Clerk account",
           });
         }
+
+        await this.requireAllowedStudentEmailDomain(user);
 
         try {
           return await this.redemptionsService.createRedemption({

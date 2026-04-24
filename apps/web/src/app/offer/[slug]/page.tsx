@@ -12,12 +12,6 @@ type CreatedRedemption = {
   qrToken: string;
   qrExpiresAt: Date | string | null;
   createdAt: Date | string;
-  offer?: {
-    id: string;
-    slug: string;
-    title: string;
-    shortDescription?: string | null;
-  };
 };
 
 type OfferDetails = {
@@ -40,11 +34,6 @@ type OfferDetails = {
   partner?: {
     id: string;
     brandName: string;
-    description?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    websiteUrl?: string | null;
-    instagramUrl?: string | null;
     logoUrl?: string | null;
   } | null;
   locations: Array<{
@@ -136,7 +125,11 @@ export default function OfferDetailsPage(): JSX.Element {
     })
   );
 
+  const profileQuery = useQuery(trpc.profile.getMyProfile.queryOptions());
+
   const offer = offerQuery.data as OfferDetails | undefined;
+  const isAllowedStudentEmail =
+    profileQuery.data?.allowedStudentEmailDomain?.isAllowed === true;
 
   const effectiveLocationId = useMemo(() => {
     if (selectedLocationId) {
@@ -148,6 +141,13 @@ export default function OfferDetailsPage(): JSX.Element {
 
   async function createQr(): Promise<void> {
     if (!offer) return;
+
+    if (!isAllowedStudentEmail) {
+      setCreateError(
+        "QR доступен только для аккаунта со студенческой почтой разрешённого домена."
+      );
+      return;
+    }
 
     setIsCreating(true);
     setCreateError(null);
@@ -204,7 +204,10 @@ export default function OfferDetailsPage(): JSX.Element {
 
   return (
     <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1120px] px-4 py-8 md:px-6 lg:px-8">
-      <Link href="/catalog" className="mb-5 inline-flex text-sm font-bold text-[#FF7F6E]">
+      <Link
+        href="/catalog"
+        className="mb-5 inline-flex text-sm font-bold text-[#FF7F6E]"
+      >
         ← Назад в каталог
       </Link>
 
@@ -267,13 +270,34 @@ export default function OfferDetailsPage(): JSX.Element {
 
         <aside className="flex flex-col gap-4">
           <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-            <h2 className="text-xl font-bold text-[#17384B]">Получить скидку</h2>
+            <h2 className="text-xl font-bold text-[#17384B]">
+              Получить скидку
+            </h2>
 
-            {isMobile ? (
+            {profileQuery.isLoading ? (
               <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-                Нажми кнопку, получи QR-код и покажи его сотруднику партнёра.
+                Проверяем студенческий домен...
               </p>
+            ) : isAllowedStudentEmail ? (
+              <div className="mt-3 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
+                Студенческий домен разрешён:{" "}
+                {profileQuery.data?.allowedStudentEmailDomain.domain}
+              </div>
             ) : (
+              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
+                QR доступен только студентам с разрешённой студенческой почтой.
+                Для Satbayev используйте email{" "}
+                <span className="font-mono">name@stud.satbayev.university</span>.
+                <Link
+                  href="/profile"
+                  className="mt-3 block rounded-2xl bg-[#17384B] px-4 py-2 text-center text-sm font-bold text-white"
+                >
+                  Открыть профиль
+                </Link>
+              </div>
+            )}
+
+            {!isMobile && (
               <div className="mt-3 rounded-2xl border border-[#FFE0D8] bg-[#FFF7F4] p-4 text-sm leading-6 text-[#8A4B3F]">
                 Кнопка “Получить QR” доступна и на сайте, но для удобного
                 использования откройте QR в мобильном приложении или на телефоне.
@@ -302,26 +326,15 @@ export default function OfferDetailsPage(): JSX.Element {
             <button
               type="button"
               onClick={createQr}
-              disabled={isCreating}
+              disabled={isCreating || !isAllowedStudentEmail}
               className="mt-5 w-full rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#f28977] disabled:opacity-60"
             >
               {isCreating ? "Создаём QR..." : "Получить QR"}
             </button>
 
-            {!isMobile && (
-              <p className="mt-3 text-center text-xs leading-5 text-[#94A3B8]">
-                На компьютере QR можно получить для теста и личного кабинета.
-                В реальном использовании удобнее открыть его с телефона.
-              </p>
-            )}
-
             {createError && (
               <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
                 {createError}
-                <p className="mt-2 text-xs font-medium text-red-600">
-                  Если ошибка связана с Application user not found, нужно
-                  связать текущий Clerk-аккаунт с пользователем в таблице users.
-                </p>
               </div>
             )}
 
@@ -355,7 +368,10 @@ export default function OfferDetailsPage(): JSX.Element {
                 <p className="text-sm text-[#6B7280]">Локации не указаны.</p>
               ) : (
                 offer.locations.map((location) => (
-                  <div key={location.id} className="rounded-2xl bg-[#F7F6F1] p-4">
+                  <div
+                    key={location.id}
+                    className="rounded-2xl bg-[#F7F6F1] p-4"
+                  >
                     <p className="font-bold text-[#17384B]">{location.name}</p>
                     <p className="mt-1 text-sm text-[#6B7280]">
                       {[location.city, location.address].filter(Boolean).join(", ")}
