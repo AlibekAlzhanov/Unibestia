@@ -3,9 +3,11 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import {
   Offer,
   OfferLocation,
+  Partner,
   PartnerLocation,
   Redemption,
   StudentProfile,
+  User,
 } from "@repo/db";
 import { RedemptionsRepository } from "./repositories/redemptions.repository.js";
 import { RedemptionsService } from "./services/redemptions.service.js";
@@ -18,6 +20,8 @@ import { RedemptionsService } from "./services/redemptions.service.js";
       StudentProfile,
       OfferLocation,
       PartnerLocation,
+      User,
+      Partner,
     ]),
   ],
   providers: [RedemptionsRepository, RedemptionsService],

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import {
   OffersRepository,
   type ListPublishedOffersParams,
@@ -6,7 +6,10 @@ import {
 
 @Injectable()
 export class OffersService {
-  constructor(private readonly offersRepository: OffersRepository) {}
+  constructor(
+    @Inject(OffersRepository)
+    private readonly offersRepository: OffersRepository
+  ) {}
 
   async listActiveCategories() {
     return this.offersRepository.listActiveCategories();

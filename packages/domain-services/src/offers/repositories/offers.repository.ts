@@ -48,22 +48,16 @@ export class OffersRepository {
   }
 
   async findCategoryBySlug(slug: string): Promise<OfferCategory | null> {
-    return this.offerCategoriesRepo.findOne({
-      where: { slug, isActive: true },
-    });
+    return this.offerCategoriesRepo.findOne({ where: { slug, isActive: true } });
   }
 
-  async listPublishedOffers(
-    params: ListPublishedOffersParams
-  ): Promise<[Offer[], number]> {
+  async listPublishedOffers(params: ListPublishedOffersParams): Promise<[Offer[], number]> {
     const qb = this.offersRepo
       .createQueryBuilder("offer")
       .where("offer.status = :status", { status: OfferStatus.PUBLISHED });
 
     if (params.categoryId) {
-      qb.andWhere("offer.categoryId = :categoryId", {
-        categoryId: params.categoryId,
-      });
+      qb.andWhere("offer.categoryId = :categoryId", { categoryId: params.categoryId });
     }
 
     if (params.featuredOnly) {
@@ -75,9 +69,7 @@ export class OffersRepository {
         `(LOWER(offer.title) LIKE LOWER(:search)
           OR LOWER(COALESCE(offer.shortDescription, '')) LIKE LOWER(:search)
           OR LOWER(offer.description) LIKE LOWER(:search))`,
-        {
-          search: `%${params.search}%`,
-        }
+        { search: `%${params.search}%` }
       );
     }
 
@@ -91,18 +83,11 @@ export class OffersRepository {
   }
 
   async findPublishedOfferBySlug(slug: string): Promise<Offer | null> {
-    return this.offersRepo.findOne({
-      where: {
-        slug,
-        status: OfferStatus.PUBLISHED,
-      },
-    });
+    return this.offersRepo.findOne({ where: { slug, status: OfferStatus.PUBLISHED } });
   }
 
   async getOfferCoverMap(offerIds: string[]): Promise<Map<string, OfferMedia>> {
-    if (offerIds.length === 0) {
-      return new Map<string, OfferMedia>();
-    }
+    if (offerIds.length === 0) return new Map<string, OfferMedia>();
 
     const media = await this.offerMediaRepo
       .createQueryBuilder("media")
@@ -113,39 +98,21 @@ export class OffersRepository {
       .getMany();
 
     const result = new Map<string, OfferMedia>();
-
     for (const item of media) {
-      if (!result.has(item.offerId)) {
-        result.set(item.offerId, item);
-      }
+      if (!result.has(item.offerId)) result.set(item.offerId, item);
     }
-
     return result;
   }
 
   async getPartnerMap(partnerIds: string[]): Promise<Map<string, Partner>> {
-    if (partnerIds.length === 0) {
-      return new Map<string, Partner>();
-    }
-
-    const partners = await this.partnersRepo.find({
-      where: { id: In(partnerIds) },
-    });
-
+    if (partnerIds.length === 0) return new Map<string, Partner>();
+    const partners = await this.partnersRepo.find({ where: { id: In(partnerIds) } });
     return new Map(partners.map((partner) => [partner.id, partner]));
   }
 
-  async getCategoryMap(
-    categoryIds: string[]
-  ): Promise<Map<string, OfferCategory>> {
-    if (categoryIds.length === 0) {
-      return new Map<string, OfferCategory>();
-    }
-
-    const categories = await this.offerCategoriesRepo.find({
-      where: { id: In(categoryIds) },
-    });
-
+  async getCategoryMap(categoryIds: string[]): Promise<Map<string, OfferCategory>> {
+    if (categoryIds.length === 0) return new Map<string, OfferCategory>();
+    const categories = await this.offerCategoriesRepo.find({ where: { id: In(categoryIds) } });
     return new Map(categories.map((category) => [category.id, category]));
   }
 
@@ -157,39 +124,25 @@ export class OffersRepository {
   }
 
   async listOfferLocations(offerId: string): Promise<OfferLocation[]> {
-    return this.offerLocationsRepo.find({
-      where: { offerId },
-    });
+    return this.offerLocationsRepo.find({ where: { offerId } });
   }
 
   async listPartnerLocationsByIds(ids: string[]): Promise<PartnerLocation[]> {
-    if (ids.length === 0) {
-      return [];
-    }
-
-    return this.partnerLocationsRepo.find({
-      where: { id: In(ids) },
-    });
+    if (ids.length === 0) return [];
+    return this.partnerLocationsRepo.find({ where: { id: In(ids) } });
   }
 
   async findPartnerById(partnerId: string): Promise<Partner | null> {
-    return this.partnersRepo.findOne({
-      where: { id: partnerId },
-    });
+    return this.partnersRepo.findOne({ where: { id: partnerId } });
   }
 
   async findCategoryById(categoryId: string): Promise<OfferCategory | null> {
-    return this.offerCategoriesRepo.findOne({
-      where: { id: categoryId },
-    });
+    return this.offerCategoriesRepo.findOne({ where: { id: categoryId } });
   }
 
   async listVisibleReviewsByOfferId(offerId: string): Promise<Review[]> {
     return this.reviewsRepo.find({
-      where: {
-        offerId,
-        status: ReviewStatus.VISIBLE,
-      },
+      where: { offerId, status: ReviewStatus.VISIBLE },
       order: { createdAt: "DESC" },
       take: 20,
     });

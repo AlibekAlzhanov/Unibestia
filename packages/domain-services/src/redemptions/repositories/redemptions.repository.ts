@@ -1,14 +1,16 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Not, Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import {
   Offer,
   OfferLocation,
   OfferStatus,
+  Partner,
   PartnerLocation,
   Redemption,
   RedemptionStatus,
   StudentProfile,
+  User,
 } from "@repo/db";
 
 @Injectable()
@@ -23,7 +25,11 @@ export class RedemptionsRepository {
     @InjectRepository(OfferLocation)
     private readonly offerLocationsRepo: Repository<OfferLocation>,
     @InjectRepository(PartnerLocation)
-    private readonly partnerLocationsRepo: Repository<PartnerLocation>
+    private readonly partnerLocationsRepo: Repository<PartnerLocation>,
+    @InjectRepository(User)
+    private readonly usersRepo: Repository<User>,
+    @InjectRepository(Partner)
+    private readonly partnersRepo: Repository<Partner>
   ) {}
 
   async findPublishedOfferById(offerId: string): Promise<Offer | null> {
@@ -97,6 +103,16 @@ export class RedemptionsRepository {
     return this.redemptionsRepo.save(created);
   }
 
+  async saveRedemption(redemption: Redemption): Promise<Redemption> {
+    return this.redemptionsRepo.save(redemption);
+  }
+
+  async findRedemptionByQrToken(qrToken: string): Promise<Redemption | null> {
+    return this.redemptionsRepo.findOne({
+      where: { qrToken },
+    });
+  }
+
   async listUserRedemptions(
     userId: string,
     limit: number,
@@ -132,6 +148,30 @@ export class RedemptionsRepository {
     });
 
     return new Map(offers.map((offer) => [offer.id, offer]));
+  }
+
+  async getUsersMap(userIds: string[]): Promise<Map<string, User>> {
+    if (userIds.length === 0) {
+      return new Map<string, User>();
+    }
+
+    const users = await this.usersRepo.find({
+      where: { id: In(userIds) },
+    });
+
+    return new Map(users.map((user) => [user.id, user]));
+  }
+
+  async getPartnersMap(partnerIds: string[]): Promise<Map<string, Partner>> {
+    if (partnerIds.length === 0) {
+      return new Map<string, Partner>();
+    }
+
+    const partners = await this.partnersRepo.find({
+      where: { id: In(partnerIds) },
+    });
+
+    return new Map(partners.map((partner) => [partner.id, partner]));
   }
 
   async getPartnerLocationsMap(

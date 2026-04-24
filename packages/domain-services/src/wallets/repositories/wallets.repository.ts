@@ -13,9 +13,7 @@ export class WalletsRepository {
   ) {}
 
   async findWalletByUserId(userId: string): Promise<Wallet | null> {
-    return this.walletsRepo.findOne({
-      where: { userId },
-    });
+    return this.walletsRepo.findOne({ where: { userId } });
   }
 
   async createWalletForUser(userId: string): Promise<Wallet> {
@@ -25,17 +23,12 @@ export class WalletsRepository {
       lifetimeEarned: 0,
       lifetimeSpent: 0,
     });
-
     return this.walletsRepo.save(wallet);
   }
 
   async findOrCreateWalletByUserId(userId: string): Promise<Wallet> {
     const existing = await this.findWalletByUserId(userId);
-
-    if (existing) {
-      return existing;
-    }
-
+    if (existing) return existing;
     return this.createWalletForUser(userId);
   }
 
