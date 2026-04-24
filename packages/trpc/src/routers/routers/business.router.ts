@@ -13,11 +13,16 @@ import {
   Partner,
   PartnerLocation,
   PartnerStatus,
+  PartnerMember,
+  PartnerMemberRole,
   Redemption,
   RedemptionStatus,
+  Role,
   User,
+  UserRole,
+  UserStatus,
 } from "@repo/db";
-import { procedure, t } from "../base/index.js";
+import { procedure, protectedProcedure, t } from "../base/index.js";
 import { z } from "zod";
 
 @Injectable()
@@ -25,6 +30,12 @@ export class BusinessRouter {
   constructor(
     @InjectRepository(Partner)
     private readonly partnersRepo: Repository<Partner>,
+    @InjectRepository(PartnerMember)
+    private readonly partnerMembersRepo: Repository<PartnerMember>,
+    @InjectRepository(Role)
+    private readonly rolesRepo: Repository<Role>,
+    @InjectRepository(UserRole)
+    private readonly userRolesRepo: Repository<UserRole>,
     @InjectRepository(Offer)
     private readonly offersRepo: Repository<Offer>,
     @InjectRepository(OfferCategory)
@@ -38,6 +49,192 @@ export class BusinessRouter {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>
   ) {}
+
+  private async getOrCreateCurrentUser(ctx: {
+    auth: {
+      userId: string | null;
+      user?: {
+        email: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        imageUrl: string | null;
+      } | null;
+    };
+  }): Promise<User> {
+    if (!ctx.auth.userId) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Authenticated Clerk user ID is missing",
+      });
+    }
+
+    const existing = await this.usersRepo.findOne({
+      where: { clerkUserId: ctx.auth.userId },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const email =
+      ctx.auth.user?.email?.trim().toLowerCase() ??
+      `${ctx.auth.userId}@clerk.local`;
+
+    const userWithEmail = await this.usersRepo.findOne({
+      where: { email },
+    });
+
+    if (userWithEmail) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message:
+          "A local user with this email already exists. Link the Clerk account to this user first.",
+      });
+    }
+
+    const displayName = [ctx.auth.user?.firstName, ctx.auth.user?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    const user = this.usersRepo.create({
+      clerkUserId: ctx.auth.userId,
+      email,
+      firstName: ctx.auth.user?.firstName ?? null,
+      lastName: ctx.auth.user?.lastName ?? null,
+      displayName: displayName || email,
+      avatarUrl: ctx.auth.user?.imageUrl ?? null,
+      phone: null,
+      status: UserStatus.ACTIVE,
+      lastLoginAt: new Date(),
+    });
+
+    return this.usersRepo.save(user);
+  }
+
+  private async getRoleCodes(userId: string): Promise<string[]> {
+    const userRoles = await this.userRolesRepo.find({
+      where: { userId },
+      relations: { role: true },
+    });
+
+    return userRoles
+      .map((userRole) => userRole.role?.code)
+      .filter((code): code is string => Boolean(code));
+  }
+
+  private async getActivePartnerMembership(userId: string) {
+    const memberships = await this.partnerMembersRepo.find({
+      where: { userId, isActive: true },
+      relations: { partner: true },
+      order: { createdAt: "ASC" },
+    });
+
+    return {
+      membership: memberships[0] ?? null,
+      membershipsCount: memberships.length,
+    };
+  }
+
+  private async requireAdminUser(ctx: {
+    auth: {
+      userId: string | null;
+      user?: {
+        email: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        imageUrl: string | null;
+      } | null;
+    };
+  }): Promise<User> {
+    const user = await this.getOrCreateCurrentUser(ctx);
+    const roles = await this.getRoleCodes(user.id);
+
+    if (!roles.includes("admin") && !roles.includes("super_admin")) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Admin access is required",
+      });
+    }
+
+    return user;
+  }
+
+  private async requireMyPartner(ctx: {
+    auth: {
+      userId: string | null;
+      user?: {
+        email: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        imageUrl: string | null;
+      } | null;
+    };
+  }): Promise<{
+    user: User;
+    partner: Partner;
+    membership: PartnerMember;
+  }> {
+    const user = await this.getOrCreateCurrentUser(ctx);
+    const { membership, membershipsCount } =
+      await this.getActivePartnerMembership(user.id);
+
+    if (!membership || !membership.partner) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Current user is not assigned to a partner",
+      });
+    }
+
+    if (membershipsCount > 1) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Current user has multiple active partner memberships. This project allows only one active partner per business user.",
+      });
+    }
+
+    if (membership.memberRole === PartnerMemberRole.STAFF) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Staff users must use the staff mobile app",
+      });
+    }
+
+    if (membership.partner.status === PartnerStatus.PENDING) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Partner application is still pending approval",
+      });
+    }
+
+    if (membership.partner.status === PartnerStatus.REJECTED) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Partner application was rejected",
+      });
+    }
+
+    if (membership.partner.status === PartnerStatus.SUSPENDED) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Partner account is suspended",
+      });
+    }
+
+    if (membership.partner.status !== PartnerStatus.APPROVED) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Partner account is not approved",
+      });
+    }
+
+    return {
+      user,
+      partner: membership.partner,
+      membership,
+    };
+  }
 
   private async getDemoPartner(): Promise<Partner | null> {
     const approved = await this.partnersRepo.findOne({
@@ -289,21 +486,392 @@ export class BusinessRouter {
   }
 
   public readonly router = t.router({
+    auth: t.router({
+      getMe: protectedProcedure.query(async ({ ctx }) => {
+        const user = await this.getOrCreateCurrentUser(ctx);
+        const roles = await this.getRoleCodes(user.id);
+        const { membership, membershipsCount } =
+          await this.getActivePartnerMembership(user.id);
+
+        const partner = membership?.partner ?? null;
+        const isAdmin =
+          roles.includes("admin") || roles.includes("super_admin");
+
+        let businessAccess:
+          | "admin"
+          | "partner"
+          | "partner_pending"
+          | "partner_rejected"
+          | "partner_suspended"
+          | "staff_mobile_only"
+          | "no_access" = "no_access";
+
+        if (isAdmin) {
+          businessAccess = "admin";
+        } else if (membership && partner) {
+          if (membership.memberRole === PartnerMemberRole.STAFF) {
+            businessAccess = "staff_mobile_only";
+          } else if (partner.status === PartnerStatus.APPROVED) {
+            businessAccess = "partner";
+          } else if (partner.status === PartnerStatus.PENDING) {
+            businessAccess = "partner_pending";
+          } else if (partner.status === PartnerStatus.REJECTED) {
+            businessAccess = "partner_rejected";
+          } else if (partner.status === PartnerStatus.SUSPENDED) {
+            businessAccess = "partner_suspended";
+          }
+        }
+
+        return {
+          user: {
+            id: user.id,
+            clerkUserId: user.clerkUserId,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            displayName: user.displayName,
+            status: user.status,
+          },
+          roles,
+          isAdmin,
+          businessAccess,
+          membership: membership
+            ? {
+                id: membership.id,
+                role: membership.memberRole,
+                isActive: membership.isActive,
+                partnerId: membership.partnerId,
+              }
+            : null,
+          partner: partner
+            ? {
+                id: partner.id,
+                brandName: partner.brandName,
+                legalName: partner.legalName,
+                status: partner.status,
+                rejectionReason: partner.rejectionReason,
+                contactEmail: partner.contactEmail,
+              }
+            : null,
+          warnings: {
+            multipleActivePartnerMemberships: membershipsCount > 1,
+          },
+        };
+      }),
+    }),
+
     partner: t.router({
-      getDashboard: procedure.query(async () => {
-        const partner = await this.getDemoPartner();
+      submitApplication: protectedProcedure
+        .input(
+          z.object({
+            legalName: z.string().trim().min(2).max(255),
+            brandName: z.string().trim().min(2).max(255),
+            description: z.string().trim().max(2000).optional(),
+            contactEmail: z.string().email(),
+            contactPhone: z.string().trim().max(30).optional(),
+            websiteUrl: z.string().url().optional(),
+            instagramUrl: z.string().url().optional(),
+            logoUrl: z.string().url().optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const user = await this.getOrCreateCurrentUser(ctx);
+          const { membership } = await this.getActivePartnerMembership(user.id);
+
+          if (membership) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "User is already assigned to a partner",
+            });
+          }
+
+          const partner = this.partnersRepo.create({
+            legalName: input.legalName,
+            brandName: input.brandName,
+            description: input.description ?? null,
+            contactEmail: input.contactEmail,
+            contactPhone: input.contactPhone ?? null,
+            websiteUrl: input.websiteUrl ?? null,
+            instagramUrl: input.instagramUrl ?? null,
+            logoUrl: input.logoUrl ?? null,
+            status: PartnerStatus.PENDING,
+            createdByUserId: user.id,
+            approvedByUserId: null,
+            approvedAt: null,
+            rejectionReason: null,
+          });
+
+          const savedPartner = await this.partnersRepo.save(partner);
+
+          const partnerMember = this.partnerMembersRepo.create({
+            partnerId: savedPartner.id,
+            userId: user.id,
+            memberRole: PartnerMemberRole.OWNER,
+            isActive: true,
+          });
+
+          await this.partnerMembersRepo.save(partnerMember);
+
+          return {
+            partner: {
+              id: savedPartner.id,
+              legalName: savedPartner.legalName,
+              brandName: savedPartner.brandName,
+              status: savedPartner.status,
+              contactEmail: savedPartner.contactEmail,
+            },
+            membership: {
+              role: partnerMember.memberRole,
+              isActive: partnerMember.isActive,
+            },
+          };
+        }),
+
+      getDashboard: protectedProcedure.query(async ({ ctx }) => {
+        const { partner } = await this.requireMyPartner(ctx);
         return this.buildPartnerSummary(partner);
       }),
 
-      listLocations: procedure.query(async () => {
-        const partner = await this.getDemoPartner();
+      listStaffMembers: protectedProcedure.query(async ({ ctx }) => {
+        const { partner } = await this.requireMyPartner(ctx);
 
-        if (!partner) {
+        const members = await this.partnerMembersRepo.find({
+          where: { partnerId: partner.id },
+          relations: { user: true },
+          order: { createdAt: "ASC" },
+        });
+
+        return {
+          partner: {
+            id: partner.id,
+            brandName: partner.brandName,
+            status: partner.status,
+          },
+          items: members.map((member) => ({
+            id: member.id,
+            partnerId: member.partnerId,
+            userId: member.userId,
+            role: member.memberRole,
+            isActive: member.isActive,
+            createdAt: member.createdAt,
+            user: member.user
+              ? {
+                  id: member.user.id,
+                  email: member.user.email,
+                  firstName: member.user.firstName,
+                  lastName: member.user.lastName,
+                  displayName: member.user.displayName,
+                  status: member.user.status,
+                }
+              : null,
+          })),
+        };
+      }),
+
+      addStaffMember: protectedProcedure
+        .input(
+          z.object({
+            email: z.string().email(),
+            role: z.enum(["manager", "staff", "analyst"]).default("staff"),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const { partner, membership } = await this.requireMyPartner(ctx);
+
+          if (
+            membership.memberRole !== PartnerMemberRole.OWNER &&
+            membership.memberRole !== PartnerMemberRole.MANAGER
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only partner owner or manager can add staff members",
+            });
+          }
+
+          const normalizedEmail = input.email.trim().toLowerCase();
+
+          const user = await this.usersRepo.findOne({
+            where: { email: normalizedEmail },
+          });
+
+          if (!user) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message:
+                "User not found. The staff user must sign in once before they can be added.",
+            });
+          }
+
+          const activeMemberships = await this.partnerMembersRepo.find({
+            where: { userId: user.id, isActive: true },
+          });
+
+          const activeOtherPartner = activeMemberships.find(
+            (item) => item.partnerId !== partner.id
+          );
+
+          if (activeOtherPartner) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "User is already assigned to another partner",
+            });
+          }
+
+          const existingMembership = await this.partnerMembersRepo.findOne({
+            where: { partnerId: partner.id, userId: user.id },
+          });
+
+          if (existingMembership) {
+            existingMembership.memberRole = input.role as PartnerMemberRole;
+            existingMembership.isActive = true;
+
+            const saved = await this.partnerMembersRepo.save(existingMembership);
+
+            return {
+              id: saved.id,
+              role: saved.memberRole,
+              isActive: saved.isActive,
+              user: {
+                id: user.id,
+                email: user.email,
+                displayName: user.displayName,
+              },
+            };
+          }
+
+          const member = this.partnerMembersRepo.create({
+            partnerId: partner.id,
+            userId: user.id,
+            memberRole: input.role as PartnerMemberRole,
+            isActive: true,
+          });
+
+          const saved = await this.partnerMembersRepo.save(member);
+
           return {
-            partner: null,
-            items: [],
+            id: saved.id,
+            role: saved.memberRole,
+            isActive: saved.isActive,
+            user: {
+              id: user.id,
+              email: user.email,
+              displayName: user.displayName,
+            },
           };
-        }
+        }),
+
+      updateStaffMemberRole: protectedProcedure
+        .input(
+          z.object({
+            memberId: z.string().uuid(),
+            role: z.enum(["manager", "staff", "analyst"]),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const { partner, membership } = await this.requireMyPartner(ctx);
+
+          if (
+            membership.memberRole !== PartnerMemberRole.OWNER &&
+            membership.memberRole !== PartnerMemberRole.MANAGER
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only partner owner or manager can update staff roles",
+            });
+          }
+
+          const member = await this.partnerMembersRepo.findOne({
+            where: { id: input.memberId, partnerId: partner.id },
+            relations: { user: true },
+          });
+
+          if (!member) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Partner member not found",
+            });
+          }
+
+          if (member.memberRole === PartnerMemberRole.OWNER) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Owner role cannot be changed from this screen",
+            });
+          }
+
+          member.memberRole = input.role as PartnerMemberRole;
+
+          const saved = await this.partnerMembersRepo.save(member);
+
+          return {
+            id: saved.id,
+            role: saved.memberRole,
+            isActive: saved.isActive,
+            user: saved.user
+              ? {
+                  id: saved.user.id,
+                  email: saved.user.email,
+                  displayName: saved.user.displayName,
+                }
+              : null,
+          };
+        }),
+
+      deactivateStaffMember: protectedProcedure
+        .input(z.object({ memberId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          const { partner, membership } = await this.requireMyPartner(ctx);
+
+          if (
+            membership.memberRole !== PartnerMemberRole.OWNER &&
+            membership.memberRole !== PartnerMemberRole.MANAGER
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message:
+                "Only partner owner or manager can deactivate staff members",
+            });
+          }
+
+          const member = await this.partnerMembersRepo.findOne({
+            where: { id: input.memberId, partnerId: partner.id },
+            relations: { user: true },
+          });
+
+          if (!member) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Partner member not found",
+            });
+          }
+
+          if (member.memberRole === PartnerMemberRole.OWNER) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Owner cannot be deactivated from this screen",
+            });
+          }
+
+          member.isActive = false;
+
+          const saved = await this.partnerMembersRepo.save(member);
+
+          return {
+            id: saved.id,
+            role: saved.memberRole,
+            isActive: saved.isActive,
+            user: saved.user
+              ? {
+                  id: saved.user.id,
+                  email: saved.user.email,
+                  displayName: saved.user.displayName,
+                }
+              : null,
+          };
+        }),
+
+      listLocations: protectedProcedure.query(async ({ ctx }) => {
+        const { partner } = await this.requireMyPartner(ctx);
 
         const items = await this.partnerLocationsRepo.find({
           where: { partnerId: partner.id },
@@ -329,7 +897,7 @@ export class BusinessRouter {
         };
       }),
 
-      createLocation: procedure
+      createLocation: protectedProcedure
         .input(
           z.object({
             name: z.string().trim().min(2).max(255),
@@ -339,15 +907,8 @@ export class BusinessRouter {
             longitude: z.number().min(-180).max(180).optional(),
           })
         )
-        .mutation(async ({ input }) => {
-          const partner = await this.getDemoPartner();
-
-          if (!partner) {
-            throw new TRPCError({
-              code: "NOT_FOUND",
-              message: "Demo partner not found",
-            });
-          }
+        .mutation(async ({ ctx, input }) => {
+          const { partner } = await this.requireMyPartner(ctx);
 
           const location = this.partnerLocationsRepo.create({
             partnerId: partner.id,
@@ -379,7 +940,7 @@ export class BusinessRouter {
           };
         }),
 
-      createOffer: procedure
+      createOffer: protectedProcedure
         .input(
           z.object({
             categoryId: z.string().uuid(),
@@ -403,15 +964,8 @@ export class BusinessRouter {
             submitForReview: z.boolean().default(false),
           })
         )
-        .mutation(async ({ input }) => {
-          const partner = await this.getDemoPartner();
-
-          if (!partner) {
-            throw new TRPCError({
-              code: "NOT_FOUND",
-              message: "Demo partner not found",
-            });
-          }
+        .mutation(async ({ ctx, input }) => {
+          const { partner } = await this.requireMyPartner(ctx);
 
           const category = await this.offerCategoriesRepo.findOne({
             where: { id: input.categoryId, isActive: true },
@@ -587,7 +1141,7 @@ export class BusinessRouter {
           };
         }),
 
-      listOffers: procedure
+      listOffers: protectedProcedure
         .input(
           z
             .object({
@@ -596,16 +1150,8 @@ export class BusinessRouter {
             })
             .optional()
         )
-        .query(async ({ input }) => {
-          const partner = await this.getDemoPartner();
-
-          if (!partner) {
-            return {
-              partner: null,
-              total: 0,
-              items: [],
-            };
-          }
+        .query(async ({ ctx, input }) => {
+          const { partner } = await this.requireMyPartner(ctx);
 
           const [items, total] = await this.offersRepo.findAndCount({
             where: { partnerId: partner.id },
@@ -666,7 +1212,7 @@ export class BusinessRouter {
           };
         }),
 
-      listRedemptions: procedure
+      listRedemptions: protectedProcedure
         .input(
           z
             .object({
@@ -675,16 +1221,8 @@ export class BusinessRouter {
             })
             .optional()
         )
-        .query(async ({ input }) => {
-          const partner = await this.getDemoPartner();
-
-          if (!partner) {
-            return {
-              partner: null,
-              total: 0,
-              items: [],
-            };
-          }
+        .query(async ({ ctx, input }) => {
+          const { partner } = await this.requireMyPartner(ctx);
 
           const [items, total] = await this.redemptionsRepo.findAndCount({
             where: { partnerId: partner.id },
@@ -760,17 +1298,9 @@ export class BusinessRouter {
           };
         }),
 
-      getAnalytics: procedure.query(async () => {
-        const partner = await this.getDemoPartner();
+      getAnalytics: protectedProcedure.query(async ({ ctx }) => {
+        const { partner } = await this.requireMyPartner(ctx);
         const summary = await this.buildPartnerSummary(partner);
-
-        if (!partner) {
-          return {
-            ...summary,
-            topOffers: [],
-            statusBreakdown: [],
-          };
-        }
 
         const offers = await this.offersRepo.find({
           where: { partnerId: partner.id },
@@ -816,7 +1346,176 @@ export class BusinessRouter {
     }),
 
     admin: t.router({
-      listOffers: procedure
+      listPartners: protectedProcedure
+        .input(
+          z
+            .object({
+              status: z
+                .enum(["pending", "approved", "rejected", "suspended", "archived"])
+                .optional(),
+              limit: z.number().int().min(1).max(100).default(100),
+              offset: z.number().int().min(0).default(0),
+            })
+            .optional()
+        )
+        .query(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
+          const where = input?.status
+            ? { status: input.status as PartnerStatus }
+            : {};
+
+          const [items, total] = await this.partnersRepo.findAndCount({
+            where,
+            order: { createdAt: "DESC" },
+            take: input?.limit ?? 100,
+            skip: input?.offset ?? 0,
+          });
+
+          const ownerMemberships = await this.partnerMembersRepo.find({
+            where: {
+              partnerId: In(items.map((partner) => partner.id)),
+              memberRole: PartnerMemberRole.OWNER,
+            },
+            relations: { user: true },
+          });
+
+          const ownerByPartnerId = new Map(
+            ownerMemberships.map((membership) => [
+              membership.partnerId,
+              membership.user,
+            ])
+          );
+
+          return {
+            total,
+            items: items.map((partner) => {
+              const owner = ownerByPartnerId.get(partner.id) ?? null;
+
+              return {
+                id: partner.id,
+                legalName: partner.legalName,
+                brandName: partner.brandName,
+                description: partner.description,
+                contactEmail: partner.contactEmail,
+                contactPhone: partner.contactPhone,
+                websiteUrl: partner.websiteUrl,
+                instagramUrl: partner.instagramUrl,
+                logoUrl: partner.logoUrl,
+                status: partner.status,
+                approvedAt: partner.approvedAt,
+                rejectionReason: partner.rejectionReason,
+                createdAt: partner.createdAt,
+                owner: owner
+                  ? {
+                      id: owner.id,
+                      email: owner.email,
+                      displayName: owner.displayName,
+                    }
+                  : null,
+              };
+            }),
+          };
+        }),
+
+      approvePartner: protectedProcedure
+        .input(z.object({ partnerId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          const adminUser = await this.requireAdminUser(ctx);
+
+          const partner = await this.partnersRepo.findOne({
+            where: { id: input.partnerId },
+          });
+
+          if (!partner) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Partner not found",
+            });
+          }
+
+          partner.status = PartnerStatus.APPROVED;
+          partner.approvedAt = new Date();
+          partner.approvedByUserId = adminUser.id;
+          partner.rejectionReason = null;
+
+          const saved = await this.partnersRepo.save(partner);
+
+          return {
+            id: saved.id,
+            brandName: saved.brandName,
+            legalName: saved.legalName,
+            status: saved.status,
+            approvedAt: saved.approvedAt,
+          };
+        }),
+
+      rejectPartner: protectedProcedure
+        .input(
+          z.object({
+            partnerId: z.string().uuid(),
+            reason: z.string().trim().min(2).max(1000).optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
+          const partner = await this.partnersRepo.findOne({
+            where: { id: input.partnerId },
+          });
+
+          if (!partner) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Partner not found",
+            });
+          }
+
+          partner.status = PartnerStatus.REJECTED;
+          partner.approvedAt = null;
+          partner.rejectionReason = input.reason ?? "Rejected by admin";
+
+          const saved = await this.partnersRepo.save(partner);
+
+          return {
+            id: saved.id,
+            brandName: saved.brandName,
+            legalName: saved.legalName,
+            status: saved.status,
+            rejectionReason: saved.rejectionReason,
+          };
+        }),
+
+      suspendPartner: protectedProcedure
+        .input(z.object({ partnerId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
+          const partner = await this.partnersRepo.findOne({
+            where: { id: input.partnerId },
+          });
+
+          if (!partner) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Partner not found",
+            });
+          }
+
+          partner.status = PartnerStatus.SUSPENDED;
+          partner.approvedAt = null;
+
+          const saved = await this.partnersRepo.save(partner);
+
+          return {
+            id: saved.id,
+            brandName: saved.brandName,
+            legalName: saved.legalName,
+            status: saved.status,
+          };
+        }),
+
+      listOffers: protectedProcedure
         .input(
           z
             .object({
@@ -835,7 +1534,9 @@ export class BusinessRouter {
             })
             .optional()
         )
-        .query(async ({ input }) => {
+        .query(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
           const where = input?.status
             ? { status: input.status as OfferStatus }
             : {};
@@ -886,9 +1587,11 @@ export class BusinessRouter {
           };
         }),
 
-      approveOffer: procedure
+      approveOffer: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
           const offer = await this.updateOfferStatus(
             input.offerId,
             OfferStatus.APPROVED
@@ -902,9 +1605,11 @@ export class BusinessRouter {
           };
         }),
 
-      publishOffer: procedure
+      publishOffer: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
           const offer = await this.updateOfferStatus(
             input.offerId,
             OfferStatus.PUBLISHED
@@ -919,9 +1624,11 @@ export class BusinessRouter {
           };
         }),
 
-      rejectOffer: procedure
+      rejectOffer: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
           const offer = await this.updateOfferStatus(
             input.offerId,
             OfferStatus.REJECTED
@@ -935,9 +1642,11 @@ export class BusinessRouter {
           };
         }),
 
-      archiveOffer: procedure
+      archiveOffer: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
           const offer = await this.updateOfferStatus(
             input.offerId,
             OfferStatus.ARCHIVED
@@ -951,7 +1660,9 @@ export class BusinessRouter {
           };
         }),
 
-      getDashboard: procedure.query(async () => {
+      getDashboard: protectedProcedure.query(async ({ ctx }) => {
+        await this.requireAdminUser(ctx);
+
         const [
           totalUsers,
           totalPartners,
