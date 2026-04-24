@@ -26,10 +26,21 @@ yarn-error.log*
 
 # Local env files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+*.env
+*.env.*
+apps/**/.env
+apps/**/.env.*
+packages/**/.env
+packages/**/.env.*
+
+# Keep examples
+!.env.example
+!.env.local.example
+!apps/**/.env.example
+!apps/**/.env.local.example
+!packages/**/.env.example
+!packages/**/.env.local.example
 
 # Turbo
 .turbo

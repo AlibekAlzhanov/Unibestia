@@ -1,9 +1,15 @@
-import type { DataSource, FindOptionsWhere, ObjectLiteral, Repository } from "typeorm";
+import type {
+  DataSource,
+  DeepPartial,
+  FindOptionsWhere,
+  ObjectLiteral,
+  Repository,
+} from "typeorm";
 
 export async function upsertByWhere<T extends ObjectLiteral>(
   repo: Repository<T>,
   where: FindOptionsWhere<T>,
-  payload: Partial<T>
+  payload: DeepPartial<T>
 ): Promise<T> {
   const existing = await repo.findOne({ where });
 
@@ -15,7 +21,7 @@ export async function upsertByWhere<T extends ObjectLiteral>(
   const created = repo.create({
     ...(where as object),
     ...(payload as object),
-  } as T);
+  } as DeepPartial<T>);
 
   return await repo.save(created);
 }

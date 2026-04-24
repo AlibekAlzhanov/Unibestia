@@ -11,9 +11,9 @@
     "target": "ES2022",
     "sourceMap": true,
     "outDir": "./dist",
-
-    "rootDir": "./src",   // ✅ ДОБАВИЛИ
+    "rootDir": "./src",
     "baseUrl": "./",
+    "ignoreDeprecations": "5.0",
 
     "incremental": true,
     "skipLibCheck": true,
