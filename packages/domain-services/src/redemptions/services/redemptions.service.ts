@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
   RedemptionStatus,
@@ -15,6 +20,7 @@ export interface CreateRedemptionInput {
 @Injectable()
 export class RedemptionsService {
   constructor(
+    @Inject(RedemptionsRepository)
     private readonly redemptionsRepository: RedemptionsRepository
   ) {}
 
@@ -30,7 +36,9 @@ export class RedemptionsService {
       throw new BadRequestException("Student verification is required");
     }
 
-    const offer = await this.redemptionsRepository.findPublishedOfferById(input.offerId);
+    const offer = await this.redemptionsRepository.findPublishedOfferById(
+      input.offerId
+    );
 
     if (!offer) {
       throw new NotFoundException("Published offer not found");

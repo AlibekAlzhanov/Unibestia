@@ -1,9 +1,12 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { WalletsRepository } from "../repositories/wallets.repository.js";
 
 @Injectable()
 export class WalletsService {
-  constructor(private readonly walletsRepository: WalletsRepository) {}
+  constructor(
+    @Inject(WalletsRepository)
+    private readonly walletsRepository: WalletsRepository
+  ) {}
 
   async getWalletByUserId(userId: string) {
     const wallet = await this.walletsRepository.findOrCreateWalletByUserId(userId);
@@ -26,11 +29,12 @@ export class WalletsService {
   ) {
     await this.walletsRepository.findOrCreateWalletByUserId(userId);
 
-    const [items, total] = await this.walletsRepository.listWalletTransactionsByUserId(
-      userId,
-      limit,
-      offset
-    );
+    const [items, total] =
+      await this.walletsRepository.listWalletTransactionsByUserId(
+        userId,
+        limit,
+        offset
+      );
 
     return {
       total,

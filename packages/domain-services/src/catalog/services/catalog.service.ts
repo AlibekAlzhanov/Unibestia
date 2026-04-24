@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { OffersService } from "../../offers/services/offers.service.js";
 
 export interface CatalogListOffersInput {
@@ -11,7 +11,10 @@ export interface CatalogListOffersInput {
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly offersService: OffersService) {}
+  constructor(
+    @Inject(OffersService)
+    private readonly offersService: OffersService
+  ) {}
 
   async listCategories() {
     const categories = await this.offersService.listActiveCategories();
