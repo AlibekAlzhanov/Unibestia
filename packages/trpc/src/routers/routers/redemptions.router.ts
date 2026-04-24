@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { Repository } from "typeorm";
 import { User } from "@repo/db";
 import { RedemptionsService } from "@repo/domain-services";
-import { protectedProcedure, t } from "../base/index.js";
+import { procedure, protectedProcedure, t } from "../base/index.js";
 import { z } from "zod";
 
 @Injectable()
@@ -149,6 +149,111 @@ export class RedemptionsRouter {
               error instanceof Error
                 ? error.message
                 : "Failed to load redemption",
+          });
+        }
+      }),
+
+    /**
+     * DEV/PANEL ONLY:
+     * Public for local testing from tRPC panel.
+     * Before production, change these back to protectedProcedure
+     * and add partner_staff/admin role checks.
+     */
+    validateByQrToken: procedure
+      .input(
+        z.object({
+          qrToken: z.string().trim().min(1),
+        })
+      )
+      .query(async ({ input }) => {
+        try {
+          return await this.redemptionsService.validateByQrToken(input.qrToken);
+        } catch (error) {
+          if (error instanceof Error) {
+            if (error.message.includes("not found")) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: error.message,
+              });
+            }
+
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: error.message,
+            });
+          }
+
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to validate QR token",
+          });
+        }
+      }),
+
+    confirmByQrToken: procedure
+      .input(
+        z.object({
+          qrToken: z.string().trim().min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        try {
+          return await this.redemptionsService.confirmByQrToken({
+            qrToken: input.qrToken,
+          });
+        } catch (error) {
+          if (error instanceof Error) {
+            if (error.message.includes("not found")) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: error.message,
+              });
+            }
+
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: error.message,
+            });
+          }
+
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to confirm QR token",
+          });
+        }
+      }),
+
+    cancelByQrToken: procedure
+      .input(
+        z.object({
+          qrToken: z.string().trim().min(1),
+          reason: z.string().trim().min(1).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        try {
+          // Current RedemptionsService signature accepts only qrToken string.
+          // The optional reason is accepted by the API schema for future UI use,
+          // but is not persisted until the service is extended.
+          return await this.redemptionsService.cancelByQrToken(input.qrToken);
+        } catch (error) {
+          if (error instanceof Error) {
+            if (error.message.includes("not found")) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: error.message,
+              });
+            }
+
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: error.message,
+            });
+          }
+
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to cancel QR token",
           });
         }
       }),

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
+  Redemption,
   RedemptionStatus,
   StudentVerificationStatus,
 } from "@repo/db";
@@ -15,6 +16,13 @@ export interface CreateRedemptionInput {
   userId: string;
   offerId: string;
   locationId?: string;
+}
+
+export interface ConfirmRedemptionByQrTokenInput {
+  qrToken: string;
+  locationId?: string;
+  orderAmount?: number;
+  discountAmount?: number;
 }
 
 @Injectable()
@@ -123,6 +131,52 @@ export class RedemptionsService {
     };
   }
 
+  async validateByQrToken(qrToken: string) {
+    const redemption = await this.findUsableRedemptionByQrToken(qrToken);
+    return this.buildStaffRedemptionResponse(redemption);
+  }
+
+  async confirmByQrToken(input: ConfirmRedemptionByQrTokenInput) {
+    const redemption = await this.findUsableRedemptionByQrToken(input.qrToken);
+
+    if (input.locationId) {
+      const allowed = await this.redemptionsRepository.isOfferLocationAllowed(
+        redemption.offerId,
+        input.locationId
+      );
+
+      if (!allowed) {
+        throw new BadRequestException("Location is not available for this offer");
+      }
+
+      redemption.locationId = input.locationId;
+    }
+
+    if (typeof input.orderAmount === "number") {
+      redemption.orderAmount = input.orderAmount.toFixed(2);
+    }
+
+    if (typeof input.discountAmount === "number") {
+      redemption.discountAmount = input.discountAmount.toFixed(2);
+    }
+
+    redemption.status = RedemptionStatus.USED;
+    redemption.usedAt = new Date();
+
+    const saved = await this.redemptionsRepository.saveRedemption(redemption);
+    return this.buildStaffRedemptionResponse(saved);
+  }
+
+  async cancelByQrToken(qrToken: string) {
+    const redemption = await this.findUsableRedemptionByQrToken(qrToken);
+
+    redemption.status = RedemptionStatus.CANCELLED;
+    redemption.cancelledAt = new Date();
+
+    const saved = await this.redemptionsRepository.saveRedemption(redemption);
+    return this.buildStaffRedemptionResponse(saved);
+  }
+
   async listUserRedemptions(userId: string, limit: number, offset: number) {
     const [items, total] = await this.redemptionsRepository.listUserRedemptions(
       userId,
@@ -196,7 +250,9 @@ export class RedemptionsService {
       throw new NotFoundException("Redemption not found");
     }
 
-    const offersMap = await this.redemptionsRepository.getOffersMap([item.offerId]);
+    const offersMap = await this.redemptionsRepository.getOffersMap([
+      item.offerId,
+    ]);
     const locationsMap = await this.redemptionsRepository.getPartnerLocationsMap(
       item.locationId ? [item.locationId] : []
     );
@@ -225,6 +281,106 @@ export class RedemptionsService {
             slug: offer.slug,
             title: offer.title,
             shortDescription: offer.shortDescription,
+          }
+        : null,
+      location: location
+        ? {
+            id: location.id,
+            name: location.name,
+            city: location.city,
+            address: location.address,
+          }
+        : null,
+    };
+  }
+
+  private async findUsableRedemptionByQrToken(
+    qrToken: string
+  ): Promise<Redemption> {
+    const redemption =
+      await this.redemptionsRepository.findRedemptionByQrToken(qrToken);
+
+    if (!redemption) {
+      throw new NotFoundException("Redemption not found");
+    }
+
+    if (redemption.status === RedemptionStatus.USED) {
+      throw new BadRequestException("Redemption has already been used");
+    }
+
+    if (redemption.status === RedemptionStatus.CANCELLED) {
+      throw new BadRequestException("Redemption has been cancelled");
+    }
+
+    if (redemption.status === RedemptionStatus.EXPIRED) {
+      throw new BadRequestException("Redemption has expired");
+    }
+
+    if (redemption.qrExpiresAt && redemption.qrExpiresAt < new Date()) {
+      redemption.status = RedemptionStatus.EXPIRED;
+      await this.redemptionsRepository.saveRedemption(redemption);
+      throw new BadRequestException("QR token has expired");
+    }
+
+    return redemption;
+  }
+
+  private async buildStaffRedemptionResponse(redemption: Redemption) {
+    const [offersMap, usersMap, partnersMap, locationsMap] = await Promise.all([
+      this.redemptionsRepository.getOffersMap([redemption.offerId]),
+      this.redemptionsRepository.getUsersMap([redemption.userId]),
+      this.redemptionsRepository.getPartnersMap([redemption.partnerId]),
+      this.redemptionsRepository.getPartnerLocationsMap(
+        redemption.locationId ? [redemption.locationId] : []
+      ),
+    ]);
+
+    const offer = offersMap.get(redemption.offerId) ?? null;
+    const user = usersMap.get(redemption.userId) ?? null;
+    const partner = partnersMap.get(redemption.partnerId) ?? null;
+    const location = redemption.locationId
+      ? (locationsMap.get(redemption.locationId) ?? null)
+      : null;
+
+    return {
+      id: redemption.id,
+      status: redemption.status,
+      qrToken: redemption.qrToken,
+      qrExpiresAt: redemption.qrExpiresAt,
+      orderAmount: redemption.orderAmount,
+      discountAmount: redemption.discountAmount,
+      bonusEarned: redemption.bonusEarned,
+      bonusSpent: redemption.bonusSpent,
+      usedAt: redemption.usedAt,
+      cancelledAt: redemption.cancelledAt,
+      createdAt: redemption.createdAt,
+      updatedAt: redemption.updatedAt,
+      offer: offer
+        ? {
+            id: offer.id,
+            slug: offer.slug,
+            title: offer.title,
+            shortDescription: offer.shortDescription,
+            discountType: offer.discountType,
+            discountValue: offer.discountValue,
+            benefitType: offer.benefitType,
+          }
+        : null,
+      student: user
+        ? {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            displayName: user.displayName,
+            status: user.status,
+          }
+        : null,
+      partner: partner
+        ? {
+            id: partner.id,
+            brandName: partner.brandName,
+            logoUrl: partner.logoUrl,
           }
         : null,
       location: location
