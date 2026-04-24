@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
@@ -52,13 +53,16 @@ export default function PartnerOffersPage(): JSX.Element {
               Управление скидками
             </h1>
             <p className="mt-3 max-w-2xl text-[#6B7280]">
-              Список скидок партнёра уже подключён к backend. Создание и
-              редактирование добавим следующим этапом.
+              Список скидок партнёра подключён к backend. Теперь можно создать
+              новую скидку через форму.
             </p>
           </div>
-          <button className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white">
+          <Link
+            href="/partner/offers/new"
+            className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white"
+          >
             Создать скидку
-          </button>
+          </Link>
         </div>
       </section>
 

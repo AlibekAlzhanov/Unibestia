@@ -4,6 +4,8 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { PostHogModule } from "@repo/analytics";
 import {
   Offer,
+  OfferCategory,
+  OfferLocation,
   Partner,
   PartnerLocation,
   Redemption,
@@ -49,6 +51,8 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
       Partner,
       PartnerLocation,
       Offer,
+      OfferCategory,
+      OfferLocation,
       Redemption,
     ]),
   ],
