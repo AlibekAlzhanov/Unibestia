@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch --watchAssets --poll=1000",
-    "dev:debug": "nest start --debug --watch --watchAssets --poll=1000",
+    "dev": "tsx watch --tsconfig tsconfig.json --clear-screen=false src/main.ts",
+    "dev:debug": "tsx watch --clear-screen=false src/main.ts",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node -r tsconfig-paths/register dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",

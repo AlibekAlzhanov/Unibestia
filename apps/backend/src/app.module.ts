@@ -20,7 +20,7 @@ import { HealthModule } from "./health/health.module.js";
       isGlobal: true,
     }),
     TRPCModule,
-    DatabaseModule,
+    DatabaseModule.forRoot(),
     RedisModule,
     PostHogModule,
     AppConfigModule,
