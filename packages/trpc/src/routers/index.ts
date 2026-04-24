@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { t } from "./base/index.js";
 import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import { AuthRouter } from "./routers/auth.router.js";
+import { BusinessRouter } from "./routers/business.router.js";
 import { CatalogRouter } from "./routers/catalog.router.js";
 import { ProfileRouter } from "./routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/redemptions.router.js";
@@ -14,7 +15,8 @@ export class AppRouterClass {
     private readonly catalogRouter: CatalogRouter,
     private readonly profileRouter: ProfileRouter,
     private readonly walletRouter: WalletRouter,
-    private readonly redemptionsRouter: RedemptionsRouter
+    private readonly redemptionsRouter: RedemptionsRouter,
+    private readonly businessRouter: BusinessRouter
   ) {}
 
   public createRouter() {
@@ -24,6 +26,7 @@ export class AppRouterClass {
       catalog: this.catalogRouter.router,
       wallet: this.walletRouter.router,
       redemptions: this.redemptionsRouter.router,
+      business: this.businessRouter.router,
     });
   }
 

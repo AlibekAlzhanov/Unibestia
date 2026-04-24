@@ -7,8 +7,9 @@ import { type JSX } from "react";
 
 const links = [
   { href: "/", label: "Портал" },
-  { href: "/staff", label: "Staff QR" },
-  { href: "/admin", label: "Admin" },
+  { href: "/partner", label: "Партнёр" },
+  { href: "/admin", label: "Админ" },
+  { href: "/staff", label: "Staff QR", isDev: true },
 ];
 
 export function BusinessNavbar(): JSX.Element {
@@ -47,6 +48,11 @@ export function BusinessNavbar(): JSX.Element {
                 ].join(" ")}
               >
                 {link.label}
+                {link.isDev && (
+                  <span className="ml-2 rounded-full bg-[#FFF0EB] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#FF7F6E]">
+                    dev
+                  </span>
+                )}
               </Link>
             );
           })}

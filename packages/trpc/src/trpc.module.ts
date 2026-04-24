@@ -3,6 +3,10 @@ import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PostHogModule } from "@repo/analytics";
 import {
+  Offer,
+  Partner,
+  PartnerLocation,
+  Redemption,
   Role,
   StudentProfile,
   StudentVerification,
@@ -20,6 +24,7 @@ import { TRPCService } from "./trpc.service.js";
 import { TRPCPanelController } from "./trpc-panel.controller.js";
 import { AppRouterClass } from "./routers/index.js";
 import { AuthRouter } from "./routers/routers/auth.router.js";
+import { BusinessRouter } from "./routers/routers/business.router.js";
 import { CatalogRouter } from "./routers/routers/catalog.router.js";
 import { ProfileRouter } from "./routers/routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/routers/redemptions.router.js";
@@ -41,6 +46,10 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
       StudentProfile,
       StudentVerification,
       University,
+      Partner,
+      PartnerLocation,
+      Offer,
+      Redemption,
     ]),
   ],
   providers: [
@@ -51,6 +60,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     CatalogRouter,
     WalletRouter,
     RedemptionsRouter,
+    BusinessRouter,
     AuthService,
   ],
   exports: [TRPCService],
