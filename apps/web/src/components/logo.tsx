@@ -17,7 +17,6 @@ const widths = {
 export function Logo({
   href = "/",
   size = "md",
-  showTagline = false,
 }: LogoProps): JSX.Element {
   const width = widths[size];
   const height = Math.round((width * 334) / 1689);
@@ -32,15 +31,6 @@ export function Logo({
         className="h-auto w-auto"
         priority={size === "lg"}
       />
-
-      {showTagline ? (
-        <span
-          className="text-sm font-semibold text-[#4F6472]"
-          style={{ fontFamily: "Nunito, Inter, sans-serif" }}
-        >
-          Твой гид по скидкам и выгодным предложениям
-        </span>
-      ) : null}
     </Link>
   );
 }

@@ -26,13 +26,6 @@ const studentBenefits = [
   },
 ];
 
-const partnerCards = [
-  { brand: "Magnum", discount: "до -10%", text: "покупки и отдельные акции" },
-  { brand: "Dodo Pizza", discount: "до -15%", text: "часть меню и комбо-предложения" },
-  { brand: "Technodom", discount: "до -7%", text: "определённые категории техники" },
-  { brand: "Marwin", discount: "до -12%", text: "книги, подарки и selected товары" },
-];
-
 const platformCards = [
   {
     title: "Гибкая система бонусов",
@@ -159,26 +152,6 @@ export default function LandingPage(): JSX.Element {
                   Витрина собирает офферы в одном интерфейсе и помогает студенту быстрее
                   принимать решение, где покупать, заказывать или пользоваться услугой.
                 </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                {partnerCards.map((item) => (
-                  <article
-                    key={item.brand}
-                    className="rounded-[24px] border border-[#E5ECE9] bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.05)]"
-                  >
-                    <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#6A7E8A]">
-                      {item.brand}
-                    </p>
-                    <p
-                      className="mt-2 text-[26px] font-black text-[#163E52]"
-                      style={displayFont}
-                    >
-                      {item.discount}
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-[#5E7480]">{item.text}</p>
-                  </article>
-                ))}
               </div>
             </div>
           </div>
