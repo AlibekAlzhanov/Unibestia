@@ -90,7 +90,6 @@ export default function StaffQrCheckPage(): JSX.Element {
     try {
       const response = await trpcClient.redemptions.cancelByQrToken.mutate({
         qrToken: qrToken.trim(),
-        reason: "Отменено сотрудником через business portal",
       });
 
       setResult(response as ValidationResult);
@@ -115,17 +114,14 @@ export default function StaffQrCheckPage(): JSX.Element {
           Проверка QR-кода скидки
         </h1>
         <p className="mt-3 text-[#6B7280]">
-          Вставь QR-токен студента. Для теста можно использовать:
-          <span className="ml-1 font-mono font-bold text-[#17384B]">
-            QR-SEED-ALIBEK-001
-          </span>
+          Вставь QR-токен студента.
         </p>
 
         <div className="mt-6 flex flex-col gap-3 md:flex-row">
           <input
             value={qrToken}
             onChange={(event) => setQrToken(event.target.value)}
-            placeholder="QR-SEED-ALIBEK-001"
+            placeholder="Введите QR-токен"
             className="h-12 flex-1 rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm outline-none transition focus:border-[#FF9F8A]"
           />
           <button
