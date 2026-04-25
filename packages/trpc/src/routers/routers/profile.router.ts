@@ -31,6 +31,21 @@ type AuthContextLike = {
   };
 };
 
+type StudentProfileCompletionField = {
+  key:
+    | "firstName"
+    | "lastName"
+    | "phone"
+    | "studentEmail"
+    | "degree"
+    | "specialty"
+    | "course"
+    | "admissionDate"
+    | "university";
+  label: string;
+  isComplete: boolean;
+};
+
 @Injectable()
 export class ProfileRouter {
   constructor(
@@ -52,6 +67,20 @@ export class ProfileRouter {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  private normalizeNullableText(value: string | null | undefined): string | null {
+    const normalized = value?.trim();
+
+    return normalized ? normalized : null;
+  }
+
+  private hasValue(value: string | number | null | undefined): boolean {
+    if (typeof value === "number") {
+      return Number.isFinite(value);
+    }
+
+    return Boolean(value?.trim());
   }
 
   private getEmailDomain(email: string): string {
@@ -209,6 +238,79 @@ export class ProfileRouter {
     return domainCheck;
   }
 
+  private buildProfileCompletion(
+    user: User,
+    studentProfile: StudentProfile | null,
+    domainCheck: {
+      isAllowed: boolean;
+      university: University | null;
+    }
+  ) {
+    const fields: StudentProfileCompletionField[] = [
+      {
+        key: "firstName",
+        label: "Имя",
+        isComplete: this.hasValue(user.firstName),
+      },
+      {
+        key: "lastName",
+        label: "Фамилия",
+        isComplete: this.hasValue(user.lastName),
+      },
+      {
+        key: "phone",
+        label: "Телефон",
+        isComplete: this.hasValue(user.phone),
+      },
+      {
+        key: "studentEmail",
+        label: "Студенческая почта",
+        isComplete: domainCheck.isAllowed,
+      },
+      {
+        key: "university",
+        label: "Университет по домену",
+        isComplete: Boolean(domainCheck.university),
+      },
+      {
+        key: "degree",
+        label: "Степень обучения",
+        isComplete: this.hasValue(studentProfile?.degree),
+      },
+      {
+        key: "specialty",
+        label: "Специальность",
+        isComplete: this.hasValue(studentProfile?.specialty),
+      },
+      {
+        key: "course",
+        label: "Курс",
+        isComplete: this.hasValue(studentProfile?.course),
+      },
+      {
+        key: "admissionDate",
+        label: "Дата поступления",
+        isComplete: this.hasValue(studentProfile?.admissionDate),
+      },
+    ];
+
+    const completedCount = fields.filter((field) => field.isComplete).length;
+    const missingFields = fields.filter((field) => !field.isComplete);
+
+    return {
+      requiredFields: fields,
+      missingFields,
+      completedCount,
+      totalCount: fields.length,
+      percentage: Math.round((completedCount / fields.length) * 100),
+      isComplete: missingFields.length === 0,
+      canSubmitVerification:
+        missingFields.length === 0 &&
+        Boolean(studentProfile) &&
+        domainCheck.isAllowed,
+    };
+  }
+
   private async buildProfilePayload(user: User) {
     const roles = await this.getRoleCodesByLocalUserId(user.id);
     const domainCheck = await this.findAllowedStudentEmailDomain(user.email);
@@ -227,6 +329,12 @@ export class ProfileRouter {
       where: { userId: user.id },
       order: { createdAt: "DESC" },
     });
+
+    const profileCompletion = this.buildProfileCompletion(
+      user,
+      studentProfile,
+      domainCheck
+    );
 
     return {
       user: {
@@ -258,16 +366,16 @@ export class ProfileRouter {
             }
           : null,
       },
+      profileCompletion,
       studentProfile: studentProfile
         ? {
             id: studentProfile.id,
             universityId: studentProfile.universityId,
             studentEmail: studentProfile.studentEmail,
-            studentCardNumber: studentProfile.studentCardNumber,
-            faculty: studentProfile.faculty,
+            degree: studentProfile.degree,
             specialty: studentProfile.specialty,
             course: studentProfile.course,
-            groupName: studentProfile.groupName,
+            admissionDate: studentProfile.admissionDate,
             verificationStatus: studentProfile.verificationStatus,
             verifiedAt: studentProfile.verifiedAt,
             verificationExpiresAt: studentProfile.verificationExpiresAt,
@@ -302,6 +410,43 @@ export class ProfileRouter {
     };
   }
 
+  private shouldResetVerificationAfterProfileChange(
+    existingUser: User,
+    studentProfile: StudentProfile,
+    input: {
+      firstName?: string;
+      lastName?: string;
+      degree?: string;
+      specialty?: string;
+      course?: number;
+      admissionDate?: string;
+    }
+  ): boolean {
+    if (studentProfile.verificationStatus !== StudentVerificationStatus.VERIFIED) {
+      return false;
+    }
+
+    const nextFirstName = this.normalizeNullableText(input.firstName) ?? existingUser.firstName;
+    const nextLastName = this.normalizeNullableText(input.lastName) ?? existingUser.lastName;
+    const nextDegree =
+      this.normalizeNullableText(input.degree) ?? studentProfile.degree;
+    const nextSpecialty =
+      this.normalizeNullableText(input.specialty) ?? studentProfile.specialty;
+    const nextCourse = input.course ?? studentProfile.course;
+    const nextAdmissionDate =
+      this.normalizeNullableText(input.admissionDate) ??
+      studentProfile.admissionDate;
+
+    return (
+      nextFirstName !== existingUser.firstName ||
+      nextLastName !== existingUser.lastName ||
+      nextDegree !== studentProfile.degree ||
+      nextSpecialty !== studentProfile.specialty ||
+      nextCourse !== studentProfile.course ||
+      nextAdmissionDate !== studentProfile.admissionDate
+    );
+  }
+
   public readonly router = t.router({
     listUniversities: protectedProcedure.query(async () => {
       const universities = await this.universitiesRepo.find({
@@ -333,15 +478,21 @@ export class ProfileRouter {
     upsertMyStudentProfile: protectedProcedure
       .input(
         z.object({
-          firstName: z.string().trim().min(1).max(100).optional(),
-          lastName: z.string().trim().min(1).max(100).optional(),
-          displayName: z.string().trim().min(1).max(150).optional(),
-          phone: z.string().trim().max(30).optional(),
-          studentCardNumber: z.string().trim().max(100).optional(),
-          faculty: z.string().trim().max(150).optional(),
-          specialty: z.string().trim().max(150).optional(),
+          firstName: z.string().trim().min(2).max(100).optional(),
+          lastName: z.string().trim().min(2).max(100).optional(),
+          displayName: z.string().trim().min(2).max(150).optional(),
+          phone: z
+            .string()
+            .trim()
+            .regex(/^\+?[0-9\s()-]{7,30}$/, "Invalid phone format")
+            .optional(),
+          degree: z.enum(["bachelor", "master", "phd", "other"]).optional(),
+          specialty: z.string().trim().min(2).max(150).optional(),
           course: z.number().int().min(1).max(8).optional(),
-          groupName: z.string().trim().max(50).optional(),
+          admissionDate: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, "Admission date must use YYYY-MM-DD")
+            .optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -358,36 +509,43 @@ export class ProfileRouter {
           });
         }
 
-        user.firstName = input.firstName ?? user.firstName;
-        user.lastName = input.lastName ?? user.lastName;
-        const resolvedDisplayName = [
-          input.firstName ?? user.firstName,
-          input.lastName ?? user.lastName,
-        ]
+        let studentProfile = await this.studentProfilesRepo.findOne({
+          where: { userId: user.id },
+        });
+
+        const shouldResetVerification =
+          studentProfile
+            ? this.shouldResetVerificationAfterProfileChange(
+                user,
+                studentProfile,
+                input
+              )
+            : false;
+
+        user.firstName = this.normalizeNullableText(input.firstName) ?? user.firstName;
+        user.lastName = this.normalizeNullableText(input.lastName) ?? user.lastName;
+
+        const resolvedDisplayName = [user.firstName, user.lastName]
           .filter(Boolean)
           .join(" ")
           .trim();
 
         user.displayName =
-          input.displayName ?? (resolvedDisplayName || user.displayName);
-        user.phone = input.phone ?? user.phone;
+          this.normalizeNullableText(input.displayName) ??
+          (resolvedDisplayName || user.displayName);
+        user.phone = this.normalizeNullableText(input.phone) ?? user.phone;
 
         await this.usersRepo.save(user);
-
-        let studentProfile = await this.studentProfilesRepo.findOne({
-          where: { userId: user.id },
-        });
 
         if (!studentProfile) {
           studentProfile = this.studentProfilesRepo.create({
             userId: user.id,
             universityId: allowedUniversity.id,
             studentEmail: user.email,
-            studentCardNumber: input.studentCardNumber ?? null,
-            faculty: input.faculty ?? null,
-            specialty: input.specialty ?? null,
+            degree: this.normalizeNullableText(input.degree),
+            specialty: this.normalizeNullableText(input.specialty),
             course: input.course ?? null,
-            groupName: input.groupName ?? null,
+            admissionDate: this.normalizeNullableText(input.admissionDate),
             verificationStatus: StudentVerificationStatus.UNVERIFIED,
             verifiedAt: null,
             verificationExpiresAt: null,
@@ -395,19 +553,25 @@ export class ProfileRouter {
         } else {
           studentProfile.universityId = allowedUniversity.id;
           studentProfile.studentEmail = user.email;
-          studentProfile.studentCardNumber =
-            input.studentCardNumber ?? studentProfile.studentCardNumber;
-          studentProfile.faculty = input.faculty ?? studentProfile.faculty;
-          studentProfile.specialty = input.specialty ?? studentProfile.specialty;
+          studentProfile.degree =
+            this.normalizeNullableText(input.degree) ?? studentProfile.degree;
+          studentProfile.specialty =
+            this.normalizeNullableText(input.specialty) ??
+            studentProfile.specialty;
           studentProfile.course = input.course ?? studentProfile.course;
-          studentProfile.groupName = input.groupName ?? studentProfile.groupName;
+          studentProfile.admissionDate =
+            this.normalizeNullableText(input.admissionDate) ??
+            studentProfile.admissionDate;
 
           if (
             studentProfile.verificationStatus ===
-            StudentVerificationStatus.REJECTED
+              StudentVerificationStatus.REJECTED ||
+            shouldResetVerification
           ) {
             studentProfile.verificationStatus =
               StudentVerificationStatus.UNVERIFIED;
+            studentProfile.verifiedAt = null;
+            studentProfile.verificationExpiresAt = null;
           }
         }
 
@@ -436,6 +600,39 @@ export class ProfileRouter {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Fill student profile before verification request",
+          });
+        }
+
+        const profileCompletion = this.buildProfileCompletion(user, studentProfile, {
+          isAllowed: true,
+          university: await this.universitiesRepo.findOne({
+            where: { id: studentProfile.universityId ?? "" },
+          }),
+        });
+
+        if (!profileCompletion.isComplete) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Complete required profile fields before verification: ${profileCompletion.missingFields
+              .map((field) => field.label)
+              .join(", ")}`,
+          });
+        }
+
+        if (
+          studentProfile.verificationStatus ===
+          StudentVerificationStatus.PENDING_REVIEW
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Verification request is already pending review",
+          });
+        }
+
+        if (studentProfile.verificationStatus === StudentVerificationStatus.VERIFIED) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Student profile is already verified",
           });
         }
 

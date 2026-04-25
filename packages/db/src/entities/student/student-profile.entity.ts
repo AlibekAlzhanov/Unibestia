@@ -42,6 +42,9 @@ export class StudentProfile {
   @Column("varchar", { name: "student_card_number", length: 100, nullable: true })
   studentCardNumber: string | null;
 
+  @Column("varchar", { name: "degree", length: 50, nullable: true })
+  degree: string | null;
+
   @Column("varchar", { length: 150, nullable: true })
   faculty: string | null;
 
@@ -50,6 +53,9 @@ export class StudentProfile {
 
   @Column("smallint", { nullable: true })
   course: number | null;
+
+  @Column("date", { name: "admission_date", nullable: true })
+  admissionDate: string | null;
 
   @Column("varchar", { name: "group_name", length: 50, nullable: true })
   groupName: string | null;

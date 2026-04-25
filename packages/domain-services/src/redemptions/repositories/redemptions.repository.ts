@@ -41,6 +41,14 @@ export class RedemptionsRepository {
     });
   }
 
+  async findOfferById(offerId: string): Promise<Offer | null> {
+    return this.offersRepo.findOne({
+      where: {
+        id: offerId,
+      },
+    });
+  }
+
   async findStudentProfileByUserId(userId: string): Promise<StudentProfile | null> {
     return this.studentProfilesRepo.findOne({
       where: { userId },
@@ -53,7 +61,6 @@ export class RedemptionsRepository {
         userId,
         offerId,
         status: In([
-          RedemptionStatus.CREATED,
           RedemptionStatus.CONFIRMED,
           RedemptionStatus.USED,
         ]),
@@ -66,10 +73,17 @@ export class RedemptionsRepository {
       where: {
         offerId,
         status: In([
-          RedemptionStatus.CREATED,
           RedemptionStatus.CONFIRMED,
           RedemptionStatus.USED,
         ]),
+      },
+    });
+  }
+
+  async getOfferLocationCount(offerId: string): Promise<number> {
+    return this.offerLocationsRepo.count({
+      where: {
+        offerId,
       },
     });
   }
@@ -88,6 +102,33 @@ export class RedemptionsRepository {
     return count > 0;
   }
 
+  async isActiveOfferLocationAllowed(
+    offerId: string,
+    partnerId: string,
+    locationId: string
+  ): Promise<boolean> {
+    const location = await this.partnerLocationsRepo.findOne({
+      where: {
+        id: locationId,
+        partnerId,
+        isActive: true,
+      },
+    });
+
+    if (!location) {
+      return false;
+    }
+
+    const offerLocationCount = await this.offerLocationsRepo.count({
+      where: {
+        offerId,
+        locationId,
+      },
+    });
+
+    return offerLocationCount > 0;
+  }
+
   async findPartnerLocationsByIds(ids: string[]): Promise<PartnerLocation[]> {
     if (ids.length === 0) {
       return [];
@@ -96,6 +137,23 @@ export class RedemptionsRepository {
     return this.partnerLocationsRepo.find({
       where: { id: In(ids) },
     });
+  }
+
+  async cancelActiveCreatedRedemptionsForUserOffer(
+    userId: string,
+    offerId: string
+  ): Promise<void> {
+    await this.redemptionsRepo.update(
+      {
+        userId,
+        offerId,
+        status: RedemptionStatus.CREATED,
+      },
+      {
+        status: RedemptionStatus.CANCELLED,
+        cancelledAt: new Date(),
+      }
+    );
   }
 
   async createRedemption(data: Partial<Redemption>): Promise<Redemption> {

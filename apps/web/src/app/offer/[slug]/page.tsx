@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type JSX, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { LocalQrCode } from "@/components/local-qr-code";
 import { useTRPC, useTRPCClient } from "@/utils/trpc";
 
 type CreatedRedemption = {
@@ -78,11 +79,6 @@ function formatBenefit(offer: {
   return "Скидка";
 }
 
-function qrImageUrl(qrToken: string): string {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-    qrToken
-  )}`;
-}
 
 function useIsMobileViewport(): boolean {
   const [isMobile, setIsMobile] = useState(false);
@@ -343,11 +339,7 @@ export default function OfferDetailsPage(): JSX.Element {
                 <p className="text-sm font-bold text-[#17384B]">
                   QR-код создан
                 </p>
-                <img
-                  src={qrImageUrl(createdRedemption.qrToken)}
-                  alt="QR code"
-                  className="mx-auto mt-4 h-[220px] w-[220px] rounded-2xl bg-white p-3"
-                />
+                <LocalQrCode value={createdRedemption.qrToken} />
                 <p className="mt-4 break-all rounded-2xl bg-white px-3 py-2 font-mono text-xs font-bold text-[#526470]">
                   {createdRedemption.qrToken}
                 </p>

@@ -4,8 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
+  Offer,
   Redemption,
   RedemptionStatus,
   StudentVerificationStatus,
@@ -18,12 +19,30 @@ export interface CreateRedemptionInput {
   locationId?: string;
 }
 
-export interface ConfirmRedemptionByQrTokenInput {
+export interface QrOperatorInput {
+  operatorUserId: string;
+  operatorPartnerId: string | null;
+  isAdmin: boolean;
+}
+
+export interface ValidateRedemptionByQrTokenInput extends QrOperatorInput {
+  qrToken: string;
+}
+
+export interface ConfirmRedemptionByQrTokenInput extends QrOperatorInput {
   qrToken: string;
   locationId?: string;
   orderAmount?: number;
   discountAmount?: number;
 }
+
+export interface CancelRedemptionByQrTokenInput extends QrOperatorInput {
+  qrToken: string;
+}
+
+const QR_TOKEN_PREFIX = "ubq_";
+const QR_TOKEN_BYTES = 32;
+const QR_TOKEN_TTL_MINUTES = 5;
 
 @Injectable()
 export class RedemptionsService {
@@ -40,8 +59,18 @@ export class RedemptionsService {
       throw new NotFoundException("Student profile not found");
     }
 
+    const now = new Date();
+
     if (studentProfile.verificationStatus !== StudentVerificationStatus.VERIFIED) {
       throw new BadRequestException("Student verification is required");
+    }
+
+    if (
+      studentProfile.verificationExpiresAt &&
+      studentProfile.verificationExpiresAt <= now
+    ) {
+      studentProfile.verificationStatus = StudentVerificationStatus.EXPIRED;
+      throw new BadRequestException("Student verification has expired");
     }
 
     const offer = await this.redemptionsRepository.findPublishedOfferById(
@@ -52,14 +81,26 @@ export class RedemptionsService {
       throw new NotFoundException("Published offer not found");
     }
 
-    const now = new Date();
+    this.assertOfferActive(offer, now);
 
-    if (offer.startAt > now) {
-      throw new BadRequestException("Offer is not active yet");
+    const offerLocationCount =
+      await this.redemptionsRepository.getOfferLocationCount(offer.id);
+
+    if (offerLocationCount > 0 && !input.locationId) {
+      throw new BadRequestException("Location is required for this offer");
     }
 
-    if (offer.endAt && offer.endAt < now) {
-      throw new BadRequestException("Offer has expired");
+    if (input.locationId) {
+      const allowed =
+        await this.redemptionsRepository.isActiveOfferLocationAllowed(
+          offer.id,
+          offer.partnerId,
+          input.locationId
+        );
+
+      if (!allowed) {
+        throw new BadRequestException("Location is not available for this offer");
+      }
     }
 
     if (offer.usageLimitPerUser) {
@@ -83,18 +124,14 @@ export class RedemptionsService {
       }
     }
 
-    if (input.locationId) {
-      const allowed = await this.redemptionsRepository.isOfferLocationAllowed(
-        offer.id,
-        input.locationId
-      );
+    await this.redemptionsRepository.cancelActiveCreatedRedemptionsForUserOffer(
+      input.userId,
+      offer.id
+    );
 
-      if (!allowed) {
-        throw new BadRequestException("Location is not available for this offer");
-      }
-    }
-
-    const qrExpiresAt = new Date(now.getTime() + 30 * 60 * 1000);
+    const qrExpiresAt = new Date(
+      now.getTime() + QR_TOKEN_TTL_MINUTES * 60 * 1000
+    );
 
     const redemption = await this.redemptionsRepository.createRedemption({
       userId: input.userId,
@@ -102,7 +139,7 @@ export class RedemptionsService {
       partnerId: offer.partnerId,
       locationId: input.locationId ?? null,
       status: RedemptionStatus.CREATED,
-      qrToken: `red_${randomUUID()}`,
+      qrToken: this.generateSecureQrToken(),
       qrExpiresAt,
       orderAmount: null,
       discountAmount: null,
@@ -121,6 +158,7 @@ export class RedemptionsService {
       status: redemption.status,
       qrToken: redemption.qrToken,
       qrExpiresAt: redemption.qrExpiresAt,
+      ttlSeconds: QR_TOKEN_TTL_MINUTES * 60,
       createdAt: redemption.createdAt,
       offer: {
         id: offer.id,
@@ -131,25 +169,40 @@ export class RedemptionsService {
     };
   }
 
-  async validateByQrToken(qrToken: string) {
-    const redemption = await this.findUsableRedemptionByQrToken(qrToken);
+  async validateByQrToken(input: ValidateRedemptionByQrTokenInput) {
+    const redemption = await this.findUsableRedemptionByQrToken(input);
     return this.buildStaffRedemptionResponse(redemption);
   }
 
   async confirmByQrToken(input: ConfirmRedemptionByQrTokenInput) {
-    const redemption = await this.findUsableRedemptionByQrToken(input.qrToken);
+    const redemption = await this.findUsableRedemptionByQrToken(input);
 
     if (input.locationId) {
-      const allowed = await this.redemptionsRepository.isOfferLocationAllowed(
-        redemption.offerId,
-        input.locationId
-      );
+      if (redemption.locationId && redemption.locationId !== input.locationId) {
+        throw new BadRequestException(
+          "QR token was created for another location"
+        );
+      }
+
+      const allowed =
+        await this.redemptionsRepository.isActiveOfferLocationAllowed(
+          redemption.offerId,
+          redemption.partnerId,
+          input.locationId
+        );
 
       if (!allowed) {
         throw new BadRequestException("Location is not available for this offer");
       }
 
       redemption.locationId = input.locationId;
+    }
+
+    const offerLocationCount =
+      await this.redemptionsRepository.getOfferLocationCount(redemption.offerId);
+
+    if (offerLocationCount > 0 && !redemption.locationId) {
+      throw new BadRequestException("Location is required to confirm this QR");
     }
 
     if (typeof input.orderAmount === "number") {
@@ -167,8 +220,8 @@ export class RedemptionsService {
     return this.buildStaffRedemptionResponse(saved);
   }
 
-  async cancelByQrToken(qrToken: string) {
-    const redemption = await this.findUsableRedemptionByQrToken(qrToken);
+  async cancelByQrToken(input: CancelRedemptionByQrTokenInput) {
+    const redemption = await this.findUsableRedemptionByQrToken(input);
 
     redemption.status = RedemptionStatus.CANCELLED;
     redemption.cancelledAt = new Date();
@@ -294,15 +347,50 @@ export class RedemptionsService {
     };
   }
 
+  private generateSecureQrToken(): string {
+    return `${QR_TOKEN_PREFIX}${randomBytes(QR_TOKEN_BYTES).toString(
+      "base64url"
+    )}`;
+  }
+
+  private assertOfferActive(offer: Offer, now = new Date()): void {
+    if (offer.startAt > now) {
+      throw new BadRequestException("Offer is not active yet");
+    }
+
+    if (offer.endAt && offer.endAt < now) {
+      throw new BadRequestException("Offer has expired");
+    }
+  }
+
+  private assertOperatorCanAccessRedemption(
+    redemption: Redemption,
+    operator: QrOperatorInput
+  ): void {
+    if (operator.isAdmin) {
+      return;
+    }
+
+    if (!operator.operatorPartnerId) {
+      throw new BadRequestException("Partner operator is required");
+    }
+
+    if (redemption.partnerId !== operator.operatorPartnerId) {
+      throw new NotFoundException("Redemption not found for this partner");
+    }
+  }
+
   private async findUsableRedemptionByQrToken(
-    qrToken: string
+    input: ValidateRedemptionByQrTokenInput
   ): Promise<Redemption> {
     const redemption =
-      await this.redemptionsRepository.findRedemptionByQrToken(qrToken);
+      await this.redemptionsRepository.findRedemptionByQrToken(input.qrToken);
 
     if (!redemption) {
       throw new NotFoundException("Redemption not found");
     }
+
+    this.assertOperatorCanAccessRedemption(redemption, input);
 
     if (redemption.status === RedemptionStatus.USED) {
       throw new BadRequestException("Redemption has already been used");
@@ -316,11 +404,26 @@ export class RedemptionsService {
       throw new BadRequestException("Redemption has expired");
     }
 
-    if (redemption.qrExpiresAt && redemption.qrExpiresAt < new Date()) {
+    const now = new Date();
+
+    if (redemption.qrExpiresAt && redemption.qrExpiresAt <= now) {
       redemption.status = RedemptionStatus.EXPIRED;
       await this.redemptionsRepository.saveRedemption(redemption);
       throw new BadRequestException("QR token has expired");
     }
+
+    const offer = await this.redemptionsRepository.findOfferById(
+      redemption.offerId
+    );
+
+    if (!offer) {
+      redemption.status = RedemptionStatus.CANCELLED;
+      redemption.cancelledAt = now;
+      await this.redemptionsRepository.saveRedemption(redemption);
+      throw new BadRequestException("Offer is no longer available");
+    }
+
+    this.assertOfferActive(offer, now);
 
     return redemption;
   }
@@ -347,6 +450,12 @@ export class RedemptionsService {
       status: redemption.status,
       qrToken: redemption.qrToken,
       qrExpiresAt: redemption.qrExpiresAt,
+      remainingSeconds: redemption.qrExpiresAt
+        ? Math.max(
+            0,
+            Math.floor((redemption.qrExpiresAt.getTime() - Date.now()) / 1000)
+          )
+        : null,
       orderAmount: redemption.orderAmount,
       discountAmount: redemption.discountAmount,
       bonusEarned: redemption.bonusEarned,

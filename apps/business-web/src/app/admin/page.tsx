@@ -5,11 +5,41 @@ import { type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
 
+type AdminDashboardData = {
+  metrics: {
+    totalUsers: number;
+    totalPartners: number;
+    approvedPartners: number;
+    totalOffers: number;
+    publishedOffers: number;
+    totalRedemptions: number;
+    usedRedemptions: number;
+  };
+  recentPartners: Array<{
+    id: string;
+    brandName: string;
+    legalName: string;
+    status: string;
+  }>;
+  recentOffers: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    status: string;
+  }>;
+};
+
 const sections = [
   {
     href: "/admin/users",
     title: "Пользователи",
     description: "Студенты, сотрудники, партнёры, администраторы и роли.",
+  },
+  {
+    href: "/admin/verifications",
+    title: "Проверка студентов",
+    description:
+      "PDF электронного студенческого, approve/reject и verified-статус.",
   },
   {
     href: "/admin/partners",
@@ -46,27 +76,28 @@ const sections = [
 export default function AdminPortalPage(): JSX.Element {
   const trpc = useTRPC();
   const adminQuery = useQuery(trpc.business.admin.getDashboard.queryOptions());
+  const adminData = adminQuery.data as AdminDashboardData | undefined;
 
   const metrics = [
     {
       label: "Пользователи",
-      value: adminQuery.data?.metrics.totalUsers ?? 0,
+      value: adminData?.metrics.totalUsers ?? 0,
       hint: "в users",
     },
     {
       label: "Партнёры",
-      value: adminQuery.data?.metrics.totalPartners ?? 0,
-      hint: `${adminQuery.data?.metrics.approvedPartners ?? 0} approved`,
+      value: adminData?.metrics.totalPartners ?? 0,
+      hint: `${adminData?.metrics.approvedPartners ?? 0} approved`,
     },
     {
       label: "Офферы",
-      value: adminQuery.data?.metrics.totalOffers ?? 0,
-      hint: `${adminQuery.data?.metrics.publishedOffers ?? 0} published`,
+      value: adminData?.metrics.totalOffers ?? 0,
+      hint: `${adminData?.metrics.publishedOffers ?? 0} published`,
     },
     {
       label: "QR использований",
-      value: adminQuery.data?.metrics.totalRedemptions ?? 0,
-      hint: `${adminQuery.data?.metrics.usedRedemptions ?? 0} used`,
+      value: adminData?.metrics.totalRedemptions ?? 0,
+      hint: `${adminData?.metrics.usedRedemptions ?? 0} used`,
     },
   ];
 
@@ -132,7 +163,7 @@ export default function AdminPortalPage(): JSX.Element {
             Последние партнёры
           </h2>
           <div className="mt-4 space-y-3">
-            {(adminQuery.data?.recentPartners ?? []).map((partner) => (
+            {(adminData?.recentPartners ?? []).map((partner) => (
               <div
                 key={partner.id}
                 className="rounded-2xl border border-[#E5ECE9] p-4"
@@ -149,7 +180,7 @@ export default function AdminPortalPage(): JSX.Element {
         <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
           <h2 className="text-xl font-bold text-[#17384B]">Последние офферы</h2>
           <div className="mt-4 space-y-3">
-            {(adminQuery.data?.recentOffers ?? []).map((offer) => (
+            {(adminData?.recentOffers ?? []).map((offer) => (
               <div
                 key={offer.id}
                 className="rounded-2xl border border-[#E5ECE9] p-4"

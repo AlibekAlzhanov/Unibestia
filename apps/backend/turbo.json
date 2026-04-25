@@ -18,7 +18,8 @@
         "REDIS_PASSWORD",
         "POSTHOG_API_KEY",
         "POSTHOG_HOST",
-        "USE_REDIS_CACHING"
+        "USE_REDIS_CACHING",
+        "STUDENT_VERIFICATION_UPLOAD_DIR"
       ]
     },
     "dev": {
@@ -37,7 +38,8 @@
         "REDIS_PASSWORD",
         "POSTHOG_API_KEY",
         "POSTHOG_HOST",
-        "USE_REDIS_CACHING"
+        "USE_REDIS_CACHING",
+        "STUDENT_VERIFICATION_UPLOAD_DIR"
       ]
     }
   }

@@ -15,6 +15,12 @@ import { RedemptionsService } from "@repo/domain-services";
 import { protectedProcedure, t } from "../base/index.js";
 import { z } from "zod";
 
+type QrOperatorContext = {
+  operatorUserId: string;
+  operatorPartnerId: string | null;
+  isAdmin: boolean;
+};
+
 @Injectable()
 export class RedemptionsRouter {
   constructor(
@@ -101,7 +107,7 @@ export class RedemptionsRouter {
     auth: {
       userId: string | null;
     };
-  }): Promise<User> {
+  }): Promise<QrOperatorContext> {
     if (!ctx.auth.userId) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
@@ -119,9 +125,15 @@ export class RedemptionsRouter {
     }
 
     const roleCodes = await this.getRoleCodesByLocalUserId(user.id);
+    const isAdmin =
+      roleCodes.includes("admin") || roleCodes.includes("super_admin");
 
-    if (roleCodes.includes("admin") || roleCodes.includes("super_admin")) {
-      return user;
+    if (isAdmin) {
+      return {
+        operatorUserId: user.id,
+        operatorPartnerId: null,
+        isAdmin: true,
+      };
     }
 
     const activePartnerMemberships = await this.partnerMembersRepo.find({
@@ -131,7 +143,7 @@ export class RedemptionsRouter {
       },
     });
 
-    const canOperateQr = activePartnerMemberships.some((membership) =>
+    const qrMemberships = activePartnerMemberships.filter((membership) =>
       [
         PartnerMemberRole.OWNER,
         PartnerMemberRole.MANAGER,
@@ -139,14 +151,26 @@ export class RedemptionsRouter {
       ].includes(membership.memberRole)
     );
 
-    if (!canOperateQr) {
+    if (qrMemberships.length === 0) {
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "Partner staff or admin access is required for QR operations",
       });
     }
 
-    return user;
+    if (qrMemberships.length > 1) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "QR operator has multiple active partner memberships. Only one active partner is allowed.",
+      });
+    }
+
+    return {
+      operatorUserId: user.id,
+      operatorPartnerId: qrMemberships[0].partnerId,
+      isAdmin: false,
+    };
   }
 
   public readonly router = t.router({
@@ -286,14 +310,17 @@ export class RedemptionsRouter {
     validateByQrToken: protectedProcedure
       .input(
         z.object({
-          qrToken: z.string().trim().min(1),
+          qrToken: z.string().trim().min(16),
         })
       )
       .query(async ({ ctx, input }) => {
-        await this.requireQrOperator(ctx);
+        const operator = await this.requireQrOperator(ctx);
 
         try {
-          return await this.redemptionsService.validateByQrToken(input.qrToken);
+          return await this.redemptionsService.validateByQrToken({
+            qrToken: input.qrToken,
+            ...operator,
+          });
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes("not found")) {
@@ -319,15 +346,22 @@ export class RedemptionsRouter {
     confirmByQrToken: protectedProcedure
       .input(
         z.object({
-          qrToken: z.string().trim().min(1),
+          qrToken: z.string().trim().min(16),
+          locationId: z.string().uuid().optional(),
+          orderAmount: z.number().min(0).optional(),
+          discountAmount: z.number().min(0).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        await this.requireQrOperator(ctx);
+        const operator = await this.requireQrOperator(ctx);
 
         try {
           return await this.redemptionsService.confirmByQrToken({
             qrToken: input.qrToken,
+            locationId: input.locationId,
+            orderAmount: input.orderAmount,
+            discountAmount: input.discountAmount,
+            ...operator,
           });
         } catch (error) {
           if (error instanceof Error) {
@@ -354,14 +388,17 @@ export class RedemptionsRouter {
     cancelByQrToken: protectedProcedure
       .input(
         z.object({
-          qrToken: z.string().trim().min(1),
+          qrToken: z.string().trim().min(16),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        await this.requireQrOperator(ctx);
+        const operator = await this.requireQrOperator(ctx);
 
         try {
-          return await this.redemptionsService.cancelByQrToken(input.qrToken);
+          return await this.redemptionsService.cancelByQrToken({
+            qrToken: input.qrToken,
+            ...operator,
+          });
         } catch (error) {
           if (error instanceof Error) {
             if (error.message.includes("not found")) {

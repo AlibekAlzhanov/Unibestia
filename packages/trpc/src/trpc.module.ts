@@ -27,6 +27,7 @@ import { AuthService } from "@repo/services";
 import { TRPCService } from "./trpc.service.js";
 import { TRPCPanelController } from "./trpc-panel.controller.js";
 import { AppRouterClass } from "./routers/index.js";
+import { AdminStudentVerificationsRouter } from "./routers/routers/admin-student-verifications.router.js";
 import { AuthRouter } from "./routers/routers/auth.router.js";
 import { BusinessRouter } from "./routers/routers/business.router.js";
 import { CatalogRouter } from "./routers/routers/catalog.router.js";
@@ -69,6 +70,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     WalletRouter,
     RedemptionsRouter,
     BusinessRouter,
+    AdminStudentVerificationsRouter,
     AuthService,
   ],
   exports: [TRPCService],
