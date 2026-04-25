@@ -1,6 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 uploads/
 apps/backend/uploads/
+apps/backend/.env
 
 # Dependencies
 node_modules

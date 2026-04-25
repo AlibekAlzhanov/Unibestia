@@ -22,7 +22,7 @@ import {
   UserRole,
   UserStatus,
 } from "@repo/db";
-import { procedure, protectedProcedure, t } from "../base/index.js";
+import { protectedProcedure, t } from "../base/index.js";
 import { z } from "zod";
 
 @Injectable()
@@ -234,22 +234,6 @@ export class BusinessRouter {
       partner: membership.partner,
       membership,
     };
-  }
-
-  private async getDemoPartner(): Promise<Partner | null> {
-    const approved = await this.partnersRepo.findOne({
-      where: { status: PartnerStatus.APPROVED },
-      order: { createdAt: "ASC" },
-    });
-
-    if (approved) {
-      return approved;
-    }
-
-    return this.partnersRepo.findOne({
-      where: {},
-      order: { createdAt: "ASC" },
-    });
   }
 
   private slugify(value: string): string {

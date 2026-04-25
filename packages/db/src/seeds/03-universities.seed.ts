@@ -14,25 +14,7 @@ export async function seedUniversities(dataSource: DataSource): Promise<void> {
       city: "Almaty",
       country: "Kazakhstan",
       status: UniversityStatus.ACTIVE,
-      domains: ["student.satbayev.local", "mail.satbayev.local"],
-    },
-    {
-      key: "kaznu",
-      name: "Al-Farabi Kazakh National University",
-      shortName: "KazNU",
-      city: "Almaty",
-      country: "Kazakhstan",
-      status: UniversityStatus.ACTIVE,
-      domains: ["student.kaznu.local"],
-    },
-    {
-      key: "aitu",
-      name: "Astana IT University",
-      shortName: "AITU",
-      city: "Astana",
-      country: "Kazakhstan",
-      status: UniversityStatus.ACTIVE,
-      domains: ["student.aitu.local"],
+      domains: ["stud.satbayev.university"],
     },
   ];
 
