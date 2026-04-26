@@ -2,14 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  SignedIn,
-  SignedOut,
-  UserButton,
-  useAuth,
-} from "@clerk/nextjs";
+import { SignedIn, SignedOut, useAuth, useClerk } from "@clerk/nextjs";
 import { Button } from "@repo/ui/components/base/button";
-import { type JSX } from "react";
+import { type JSX, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Logo } from "@/components/logo";
 import { useTRPC } from "@/utils/trpc";
@@ -17,9 +12,12 @@ import { useTRPC } from "@/utils/trpc";
 const studentLinks = [
   { href: "/home", label: "Главная" },
   { href: "/catalog", label: "Каталог" },
-  { href: "/wallet", label: "Кошелёк" },
-  { href: "/my-redemptions", label: "Мои скидки" },
-  { href: "/profile", label: "Профиль" },
+];
+
+const dropdownLinks = [
+  { href: "/profile", label: "Профиль", description: "Данные студента" },
+  { href: "/wallet", label: "Кошелёк", description: "Бонусы и баланс" },
+  { href: "/my-redemptions", label: "Мои скидки", description: "QR и история" },
 ];
 
 type NavbarProfile = {
@@ -37,10 +35,12 @@ function makeInitials(profile?: NavbarProfile): string {
   const displayName = user?.displayName?.trim();
 
   if (user?.firstName || user?.lastName) {
-    return `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`
+    const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`
       .trim()
       .slice(0, 2)
       .toUpperCase();
+
+    return initials || "U";
   }
 
   if (displayName) {
@@ -59,7 +59,11 @@ function makeInitials(profile?: NavbarProfile): string {
 export function Navbar(): JSX.Element {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
+  const { signOut } = useClerk();
   const trpc = useTRPC();
+
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const profileQuery = useQuery({
     ...trpc.profile.getMyProfile.queryOptions(),
@@ -67,13 +71,57 @@ export function Navbar(): JSX.Element {
     staleTime: 60_000,
   });
 
+  useEffect(() => {
+    if (!isSignedIn) {
+      return;
+    }
+
+    function handleAvatarUpdated(): void {
+      void profileQuery.refetch();
+    }
+
+    window.addEventListener("unibestia-avatar-updated", handleAvatarUpdated);
+
+    return () => {
+      window.removeEventListener(
+        "unibestia-avatar-updated",
+        handleAvatarUpdated
+      );
+    };
+  }, [isSignedIn, profileQuery]);
+
+  useEffect(() => {
+    function handleDocumentMouseDown(event: MouseEvent): void {
+      if (!menuRef.current) {
+        return;
+      }
+
+      if (!menuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    setIsProfileMenuOpen(false);
+  }, [pathname]);
+
   const profile = profileQuery.data as NavbarProfile | undefined;
   const avatarUrl = profile?.user.avatarUrl ?? null;
+
   const displayName =
     profile?.user.displayName ||
     [profile?.user.firstName, profile?.user.lastName].filter(Boolean).join(" ") ||
     profile?.user.email ||
     "Профиль";
+
+  const email = profile?.user.email ?? "";
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#E8ECE8] bg-white/88 backdrop-blur-md">
@@ -123,28 +171,108 @@ export function Navbar(): JSX.Element {
           </SignedOut>
 
           <SignedIn>
-            <Link
-              href="/profile"
-              className="hidden items-center gap-2 rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] px-2 py-1 transition hover:border-[#FFB5A4] md:flex"
-              title="Открыть профиль"
-            >
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt="Аватарка пользователя"
-                  className="h-9 w-9 rounded-full object-cover"
-                />
-              ) : (
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#17384B] text-xs font-black text-white">
-                  {makeInitials(profile)}
-                </span>
-              )}
-              <span className="max-w-[140px] truncate pr-2 text-sm font-bold text-[#17384B]">
-                {displayName}
-              </span>
-            </Link>
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsProfileMenuOpen((current) => !current)}
+                className="flex items-center gap-2 rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] px-2 py-1 transition hover:border-[#FFB5A4] hover:bg-white"
+                aria-expanded={isProfileMenuOpen}
+                aria-haspopup="menu"
+              >
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Аватарка пользователя"
+                    className="h-9 w-9 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#17384B] text-xs font-black text-white">
+                    {makeInitials(profile)}
+                  </span>
+                )}
 
-            <UserButton afterSignOutUrl="/" />
+                <span className="hidden max-w-[150px] truncate pr-1 text-sm font-bold text-[#17384B] md:inline">
+                  {displayName}
+                </span>
+
+                <span className="pr-2 text-xs font-black text-[#9CA3AF]">
+                  {isProfileMenuOpen ? "▲" : "▼"}
+                </span>
+              </button>
+
+              {isProfileMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-3 w-[280px] overflow-hidden rounded-[24px] border border-[#E5ECE9] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
+                >
+                  <div className="border-b border-[#E5ECE9] bg-[#F9FAF8] p-4">
+                    <div className="flex items-center gap-3">
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt="Аватарка пользователя"
+                          className="h-12 w-12 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#17384B] text-sm font-black text-white">
+                          {makeInitials(profile)}
+                        </span>
+                      )}
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-[#17384B]">
+                          {displayName}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-[#6B7280]">
+                          {email}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-2">
+                    {dropdownLinks.map((link) => {
+                      const isActive =
+                        pathname === link.href ||
+                        pathname.startsWith(`${link.href}/`);
+
+                      return (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          role="menuitem"
+                          className={[
+                            "block rounded-2xl px-4 py-3 transition",
+                            isActive
+                              ? "bg-[#FFF0EB]"
+                              : "hover:bg-[#F7F6F1]",
+                          ].join(" ")}
+                        >
+                          <span className="block text-sm font-black text-[#17384B]">
+                            {link.label}
+                          </span>
+                          <span className="mt-1 block text-xs text-[#6B7280]">
+                            {link.description}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  <div className="border-t border-[#E5ECE9] p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void signOut({ redirectUrl: "/" });
+                      }}
+                      className="w-full rounded-2xl px-4 py-3 text-left text-sm font-black text-red-600 transition hover:bg-red-50"
+                    >
+                      Выйти из аккаунта
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </SignedIn>
         </div>
       </div>

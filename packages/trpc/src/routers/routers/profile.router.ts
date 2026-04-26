@@ -138,8 +138,9 @@ export class ProfileRouter {
         ctx.auth.user?.firstName ?? existingByClerkId.firstName;
       existingByClerkId.lastName =
         ctx.auth.user?.lastName ?? existingByClerkId.lastName;
-      existingByClerkId.avatarUrl =
-        ctx.auth.user?.imageUrl ?? existingByClerkId.avatarUrl;
+      if (!existingByClerkId.avatarUrl && ctx.auth.user?.imageUrl) {
+        existingByClerkId.avatarUrl = ctx.auth.user.imageUrl;
+      }
       existingByClerkId.lastLoginAt = new Date();
 
       return this.usersRepo.save(existingByClerkId);
@@ -162,8 +163,9 @@ export class ProfileRouter {
         ctx.auth.user?.firstName ?? existingByEmail.firstName;
       existingByEmail.lastName =
         ctx.auth.user?.lastName ?? existingByEmail.lastName;
-      existingByEmail.avatarUrl =
-        ctx.auth.user?.imageUrl ?? existingByEmail.avatarUrl;
+      if (!existingByEmail.avatarUrl && ctx.auth.user?.imageUrl) {
+        existingByEmail.avatarUrl = ctx.auth.user.imageUrl;
+      }
       existingByEmail.lastLoginAt = new Date();
 
       return this.usersRepo.save(existingByEmail);

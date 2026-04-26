@@ -118,6 +118,9 @@ export function AvatarUploadCard({
 
       setAvatarFile(null);
       setMessage("Аватарка обновлена.");
+
+      window.dispatchEvent(new Event("unibestia-avatar-updated"));
+
       await onUploaded?.();
     } catch (caughtError) {
       setError(
