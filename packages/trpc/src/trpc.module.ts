@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PostHogModule } from "@repo/analytics";
 import {
+  AuditLog,
   Offer,
   OfferCategory,
   OfferLocation,
@@ -45,6 +46,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     WalletsModule,
     RedemptionsModule,
     TypeOrmModule.forFeature([
+      AuditLog,
       User,
       UserRole,
       Role,

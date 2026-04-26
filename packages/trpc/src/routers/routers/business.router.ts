@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { randomUUID } from "node:crypto";
 import { In, Repository } from "typeorm";
 import {
+  AuditLog,
   Offer,
   OfferBenefitType,
   OfferCategory,
@@ -47,7 +48,9 @@ export class BusinessRouter {
     @InjectRepository(PartnerLocation)
     private readonly partnerLocationsRepo: Repository<PartnerLocation>,
     @InjectRepository(User)
-    private readonly usersRepo: Repository<User>
+    private readonly usersRepo: Repository<User>,
+    @InjectRepository(AuditLog)
+    private readonly auditLogsRepo: Repository<AuditLog>
   ) {}
 
   private async getOrCreateCurrentUser(ctx: {
@@ -158,6 +161,34 @@ export class BusinessRouter {
     }
 
     return user;
+  }
+
+  private async writeBusinessAuditLog(input: {
+    actorUserId?: string | null;
+    actorRole?: string | null;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    partnerId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }): Promise<void> {
+    try {
+      const auditLog = this.auditLogsRepo.create({
+        actorUserId: input.actorUserId ?? null,
+        actorRole: input.actorRole ?? null,
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        partnerId: input.partnerId ?? null,
+        metadata: input.metadata ?? null,
+        ipAddress: null,
+        userAgent: null,
+      });
+
+      await this.auditLogsRepo.save(auditLog);
+    } catch {
+      // Audit logging must not break partner lifecycle flow.
+    }
   }
 
   private async requireMyPartner(ctx: {
@@ -639,6 +670,21 @@ export class BusinessRouter {
 
           await this.partnerMembersRepo.save(partnerMember);
 
+          await this.writeBusinessAuditLog({
+            actorUserId: user.id,
+            actorRole: "partner_owner",
+            action: "partner.application_submitted",
+            entityType: "partner",
+            entityId: savedPartner.id,
+            partnerId: savedPartner.id,
+            metadata: {
+              brandName: savedPartner.brandName,
+              legalName: savedPartner.legalName,
+              contactEmail: savedPartner.contactEmail,
+              status: savedPartner.status,
+            },
+          });
+
           return {
             partner: {
               id: savedPartner.id,
@@ -656,13 +702,13 @@ export class BusinessRouter {
 
       getDashboard: protectedProcedure.query(async ({ ctx }) => {
         const { partner, membership } = await this.requireMyPartner(ctx);
-          this.assertPartnerReadOnlyOrManageAccess(membership);
+        this.assertPartnerReadOnlyOrManageAccess(membership);
         return this.buildPartnerSummary(partner);
       }),
 
       listStaffMembers: protectedProcedure.query(async ({ ctx }) => {
         const { partner, membership } = await this.requireMyPartner(ctx);
-          this.assertPartnerManageAccess(membership);
+        this.assertPartnerManageAccess(membership);
 
         const members = await this.partnerMembersRepo.find({
           where: { partnerId: partner.id },
@@ -913,7 +959,7 @@ export class BusinessRouter {
 
       listLocations: protectedProcedure.query(async ({ ctx }) => {
         const { partner, membership } = await this.requireMyPartner(ctx);
-          this.assertPartnerReadOnlyOrManageAccess(membership);
+        this.assertPartnerReadOnlyOrManageAccess(membership);
 
         const items = await this.partnerLocationsRepo.find({
           where: { partnerId: partner.id },
@@ -1478,12 +1524,29 @@ export class BusinessRouter {
             });
           }
 
+          const previousStatus = partner.status;
+
           partner.status = PartnerStatus.APPROVED;
           partner.approvedAt = new Date();
           partner.approvedByUserId = adminUser.id;
           partner.rejectionReason = null;
 
           const saved = await this.partnersRepo.save(partner);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "partner.approved",
+            entityType: "partner",
+            entityId: saved.id,
+            partnerId: saved.id,
+            metadata: {
+              brandName: saved.brandName,
+              legalName: saved.legalName,
+              previousStatus,
+              newStatus: saved.status,
+            },
+          });
 
           return {
             id: saved.id,
@@ -1498,11 +1561,11 @@ export class BusinessRouter {
         .input(
           z.object({
             partnerId: z.string().uuid(),
-            reason: z.string().trim().min(2).max(1000).optional(),
+            reason: z.string().trim().min(3).max(2000).optional(),
           })
         )
         .mutation(async ({ ctx, input }) => {
-          await this.requireAdminUser(ctx);
+          const adminUser = await this.requireAdminUser(ctx);
 
           const partner = await this.partnersRepo.findOne({
             where: { id: input.partnerId },
@@ -1515,11 +1578,31 @@ export class BusinessRouter {
             });
           }
 
+          const previousStatus = partner.status;
+          const reason = input.reason ?? "Rejected by admin";
+
           partner.status = PartnerStatus.REJECTED;
           partner.approvedAt = null;
-          partner.rejectionReason = input.reason ?? "Rejected by admin";
+          partner.approvedByUserId = null;
+          partner.rejectionReason = reason;
 
           const saved = await this.partnersRepo.save(partner);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "partner.rejected",
+            entityType: "partner",
+            entityId: saved.id,
+            partnerId: saved.id,
+            metadata: {
+              brandName: saved.brandName,
+              legalName: saved.legalName,
+              previousStatus,
+              newStatus: saved.status,
+              reason,
+            },
+          });
 
           return {
             id: saved.id,
@@ -1531,9 +1614,14 @@ export class BusinessRouter {
         }),
 
       suspendPartner: protectedProcedure
-        .input(z.object({ partnerId: z.string().uuid() }))
+        .input(
+          z.object({
+            partnerId: z.string().uuid(),
+            reason: z.string().trim().min(3).max(2000).optional(),
+          })
+        )
         .mutation(async ({ ctx, input }) => {
-          await this.requireAdminUser(ctx);
+          const adminUser = await this.requireAdminUser(ctx);
 
           const partner = await this.partnersRepo.findOne({
             where: { id: input.partnerId },
@@ -1546,16 +1634,143 @@ export class BusinessRouter {
             });
           }
 
+          const previousStatus = partner.status;
+          const reason = input.reason ?? "Suspended by admin";
+
           partner.status = PartnerStatus.SUSPENDED;
           partner.approvedAt = null;
+          partner.approvedByUserId = null;
+          partner.rejectionReason = reason;
 
           const saved = await this.partnersRepo.save(partner);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "partner.suspended",
+            entityType: "partner",
+            entityId: saved.id,
+            partnerId: saved.id,
+            metadata: {
+              brandName: saved.brandName,
+              legalName: saved.legalName,
+              previousStatus,
+              newStatus: saved.status,
+              reason,
+            },
+          });
 
           return {
             id: saved.id,
             brandName: saved.brandName,
             legalName: saved.legalName,
             status: saved.status,
+            rejectionReason: saved.rejectionReason,
+          };
+        }),
+
+      restorePartner: protectedProcedure
+        .input(z.object({ partnerId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          const adminUser = await this.requireAdminUser(ctx);
+
+          const partner = await this.partnersRepo.findOne({
+            where: { id: input.partnerId },
+          });
+
+          if (!partner) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Partner not found",
+            });
+          }
+
+          const previousStatus = partner.status;
+
+          partner.status = PartnerStatus.APPROVED;
+          partner.approvedAt = new Date();
+          partner.approvedByUserId = adminUser.id;
+          partner.rejectionReason = null;
+
+          const saved = await this.partnersRepo.save(partner);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "partner.restored",
+            entityType: "partner",
+            entityId: saved.id,
+            partnerId: saved.id,
+            metadata: {
+              brandName: saved.brandName,
+              legalName: saved.legalName,
+              previousStatus,
+              newStatus: saved.status,
+            },
+          });
+
+          return {
+            id: saved.id,
+            brandName: saved.brandName,
+            legalName: saved.legalName,
+            status: saved.status,
+            approvedAt: saved.approvedAt,
+          };
+        }),
+
+      archivePartner: protectedProcedure
+        .input(
+          z.object({
+            partnerId: z.string().uuid(),
+            reason: z.string().trim().min(3).max(2000).optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const adminUser = await this.requireAdminUser(ctx);
+
+          const partner = await this.partnersRepo.findOne({
+            where: { id: input.partnerId },
+          });
+
+          if (!partner) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Partner not found",
+            });
+          }
+
+          const previousStatus = partner.status;
+          const reason = input.reason ?? "Archived by admin";
+
+          partner.status = PartnerStatus.ARCHIVED;
+          partner.approvedAt = null;
+          partner.approvedByUserId = null;
+          partner.rejectionReason = reason;
+
+          const saved = await this.partnersRepo.save(partner);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "partner.archived",
+            entityType: "partner",
+            entityId: saved.id,
+            partnerId: saved.id,
+            metadata: {
+              brandName: saved.brandName,
+              legalName: saved.legalName,
+              previousStatus,
+              newStatus: saved.status,
+              reason,
+            },
+          });
+
+          return {
+            id: saved.id,
+            brandName: saved.brandName,
+            legalName: saved.legalName,
+            status: saved.status,
+            rejectionReason: saved.rejectionReason,
           };
         }),
 
