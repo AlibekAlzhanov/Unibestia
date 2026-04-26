@@ -4,6 +4,10 @@ uploads/
 apps/backend/uploads/
 apps/backend/.env
 
+ml/student-id-ocr/dataset/
+ml/student-id-ocr/.venv/
+ml/student-id-ocr/checkpoints/
+
 # Dependencies
 node_modules
 .pnp
