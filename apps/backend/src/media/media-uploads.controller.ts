@@ -3,6 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Inject,
   NotFoundException,
   Param,
   Post,
@@ -74,8 +75,9 @@ export class MediaUploadsController {
     private readonly partnerMembersRepo: Repository<PartnerMember>,
     @InjectRepository(Offer)
     private readonly offersRepo: Repository<Offer>,
-    @InjectRepository(OfferMedia)
+   @InjectRepository(OfferMedia)
     private readonly offerMediaRepo: Repository<OfferMedia>,
+    @Inject(StorageService)
     private readonly storageService: StorageService
   ) {}
 

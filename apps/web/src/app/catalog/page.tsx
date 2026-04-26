@@ -14,8 +14,15 @@ type OfferCard = {
   discountValue?: string | null;
   cashbackPercent?: string | null;
   bonusRewardPoints?: number | null;
+  coverMedia?: {
+    id: string;
+    fileUrl: string;
+    isCover?: boolean | null;
+  } | null;
   partner?: {
+    id?: string;
     brandName?: string | null;
+    logoUrl?: string | null;
   } | null;
   category?: {
     name?: string | null;
@@ -40,6 +47,71 @@ function formatBenefit(offer: OfferCard): string {
   }
 
   return "Скидка";
+}
+
+function CatalogOfferCard({ offer }: { offer: OfferCard }): JSX.Element {
+  return (
+    <Link
+      href={`/offer/${offer.slug}`}
+      className="group overflow-hidden rounded-[28px] border border-[#E5ECE9] bg-white shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4]"
+    >
+      {offer.coverMedia?.fileUrl ? (
+        <img
+          src={offer.coverMedia.fileUrl}
+          alt={offer.title}
+          className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+        />
+      ) : (
+        <div className="flex h-44 items-center justify-center bg-gradient-to-br from-[#17384B] to-[#FF9F8A] text-sm font-black uppercase tracking-[0.22em] text-white">
+          UniBestia
+        </div>
+      )}
+
+      <div className="p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="flex min-w-0 gap-3">
+            {offer.partner?.logoUrl ? (
+              <img
+                src={offer.partner.logoUrl}
+                alt={offer.partner.brandName ?? "Партнёр"}
+                className="h-10 w-10 shrink-0 rounded-2xl border border-[#E5ECE9] object-cover"
+              />
+            ) : (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#F7F6F1] text-xs font-black text-[#526470]">
+                {offer.partner?.brandName?.slice(0, 1).toUpperCase() ?? "P"}
+              </div>
+            )}
+
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-[#9CA3AF]">
+                {offer.partner?.brandName ?? "Партнёр"}
+              </p>
+              <h2 className="mt-1 line-clamp-2 text-lg font-bold text-[#17384B]">
+                {offer.title}
+              </h2>
+            </div>
+          </div>
+
+          <span className="shrink-0 rounded-2xl bg-[#FFF0EB] px-3 py-2 text-sm font-extrabold text-[#FF7F6E]">
+            {formatBenefit(offer)}
+          </span>
+        </div>
+
+        <p className="line-clamp-3 text-sm leading-6 text-[#6B7280]">
+          {offer.shortDescription ?? "Подробности доступны в карточке."}
+        </p>
+
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <span className="rounded-xl bg-[#F7F6F1] px-3 py-1 text-xs font-bold text-[#526470]">
+            {offer.category?.name ?? "Категория"}
+          </span>
+          <span className="text-sm font-bold text-[#17384B] group-hover:text-[#FF7F6E]">
+            Подробнее →
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export default function CatalogPage(): JSX.Element {
@@ -146,38 +218,7 @@ export default function CatalogPage(): JSX.Element {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {offers.map((offer) => (
-            <Link
-              key={offer.id}
-              href={`/offer/${offer.slug}`}
-              className="group rounded-[28px] border border-[#E5ECE9] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4]"
-            >
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-[#9CA3AF]">
-                    {offer.partner?.brandName ?? "Партнёр"}
-                  </p>
-                  <h2 className="mt-1 text-lg font-bold text-[#17384B]">
-                    {offer.title}
-                  </h2>
-                </div>
-                <span className="shrink-0 rounded-2xl bg-[#FFF0EB] px-3 py-2 text-sm font-extrabold text-[#FF7F6E]">
-                  {formatBenefit(offer)}
-                </span>
-              </div>
-
-              <p className="line-clamp-3 text-sm leading-6 text-[#6B7280]">
-                {offer.shortDescription ?? "Подробности доступны в карточке."}
-              </p>
-
-              <div className="mt-5 flex items-center justify-between gap-3">
-                <span className="rounded-xl bg-[#F7F6F1] px-3 py-1 text-xs font-bold text-[#526470]">
-                  {offer.category?.name ?? "Категория"}
-                </span>
-                <span className="text-sm font-bold text-[#17384B] group-hover:text-[#FF7F6E]">
-                  Подробнее →
-                </span>
-              </div>
-            </Link>
+            <CatalogOfferCard key={offer.id} offer={offer} />
           ))}
         </div>
       )}

@@ -1,9 +1,10 @@
 "use client";
-
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
 import { type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
+import { PartnerLogoUploadCard } from "@/components/media/partner-logo-upload-card";
 
 const sections = [
   {
@@ -40,6 +41,7 @@ const sections = [
 
 export default function PartnerDashboardPage(): JSX.Element {
   const trpc = useTRPC();
+  const { getToken } = useAuth();
   const dashboardQuery = useQuery(
     trpc.business.partner.getDashboard.queryOptions()
   );
@@ -72,6 +74,13 @@ export default function PartnerDashboardPage(): JSX.Element {
   return (
     <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1280px] px-4 py-10 md:px-6 lg:px-8">
       <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+
+        <PartnerLogoUploadCard
+          logoUrl={data?.partner?.logoUrl}
+          getToken={getToken}
+          onUploaded={() => dashboardQuery.refetch()}
+        />
+
         <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
           Partner Dashboard
         </p>

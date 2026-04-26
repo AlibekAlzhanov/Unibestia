@@ -5,6 +5,7 @@ import { type FormEvent, type JSX, useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC, useTRPCClient } from "@/utils/trpc";
+import { AvatarUploadCard } from "@/components/media/avatar-upload-card";
 
 type Degree = "" | "bachelor" | "master" | "phd" | "other";
 
@@ -569,6 +570,14 @@ export default function ProfilePage(): JSX.Element {
           </form>
 
           <aside className="grid gap-6">
+
+            <AvatarUploadCard
+              avatarUrl={profile?.user.avatarUrl ?? null}
+              displayName={profile?.user.displayName ?? null}
+              email={profile?.user.email ?? null}
+              onUploaded={() => profileQuery.refetch()}
+            />
+
             <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
               <h2 className="text-xl font-black text-[#17384B]">
                 Готовность профиля

@@ -27,6 +27,13 @@ type OfferDetails = {
   cashbackPercent?: string | null;
   bonusRewardPoints?: number | null;
   minPurchaseAmount?: string | null;
+  media: Array<{
+    id: string;
+    mediaType: string;
+    fileUrl: string;
+    sortOrder: number;
+    isCover: boolean;
+  }>;
   category?: {
     id: string;
     name: string;
@@ -35,6 +42,11 @@ type OfferDetails = {
   partner?: {
     id: string;
     brandName: string;
+    description?: string | null;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    websiteUrl?: string | null;
+    instagramUrl?: string | null;
     logoUrl?: string | null;
   } | null;
   locations: Array<{
@@ -78,7 +90,6 @@ function formatBenefit(offer: {
 
   return "Скидка";
 }
-
 
 function useIsMobileViewport(): boolean {
   const [isMobile, setIsMobile] = useState(false);
@@ -126,6 +137,18 @@ export default function OfferDetailsPage(): JSX.Element {
   const offer = offerQuery.data as OfferDetails | undefined;
   const isAllowedStudentEmail =
     profileQuery.data?.allowedStudentEmailDomain?.isAllowed === true;
+
+  const coverMedia = useMemo(() => {
+    const media = offer?.media ?? [];
+    return media.find((item) => item.isCover) ?? media[0] ?? null;
+  }, [offer?.media]);
+
+  const galleryMedia = useMemo(() => {
+    const media = offer?.media ?? [];
+    return coverMedia
+      ? media.filter((item) => item.id !== coverMedia.id)
+      : media.slice(1);
+  }, [coverMedia, offer?.media]);
 
   const effectiveLocationId = useMemo(() => {
     if (selectedLocationId) {
@@ -208,63 +231,131 @@ export default function OfferDetailsPage(): JSX.Element {
       </Link>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
-        <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-          <div className="mb-5 flex flex-wrap items-center gap-2">
-            {offer.category && (
-              <span className="rounded-2xl bg-[#F7F6F1] px-3 py-1 text-xs font-bold text-[#526470]">
-                {offer.category.name}
-              </span>
-            )}
-            {offer.partner && (
-              <span className="rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-bold text-[#FF7F6E]">
-                {offer.partner.brandName}
-              </span>
-            )}
-          </div>
-
-          <h1 className="text-3xl font-bold tracking-tight text-[#17384B] md:text-4xl">
-            {offer.title}
-          </h1>
-
-          {offer.shortDescription && (
-            <p className="mt-4 text-lg leading-8 text-[#526470]">
-              {offer.shortDescription}
-            </p>
-          )}
-
-          <div className="mt-6 rounded-[28px] bg-[#17384B] p-6 text-white">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#FFB5A4]">
-              Выгода
-            </p>
-            <div className="mt-2 text-5xl font-black">
-              {formatBenefit(offer)}
-            </div>
-            {offer.minPurchaseAmount && (
-              <p className="mt-3 text-sm text-[#DDE8EA]">
-                Минимальная сумма покупки:{" "}
-                {Number(offer.minPurchaseAmount).toFixed(0)} ₸
-              </p>
-            )}
-          </div>
-
-          <div className="mt-7">
-            <h2 className="text-xl font-bold text-[#17384B]">Описание</h2>
-            <p className="mt-3 whitespace-pre-line leading-7 text-[#526470]">
-              {offer.description}
-            </p>
-          </div>
-
-          {offer.terms && (
-            <div className="mt-7 rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5">
-              <h2 className="text-lg font-bold text-[#17384B]">Условия</h2>
-              <p className="mt-2 whitespace-pre-line leading-7 text-[#526470]">
-                {offer.terms}
-              </p>
+        <section className="overflow-hidden rounded-[32px] bg-white shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          {coverMedia?.fileUrl ? (
+            <img
+              src={coverMedia.fileUrl}
+              alt={offer.title}
+              className="h-72 w-full object-cover md:h-96"
+            />
+          ) : (
+            <div className="flex h-72 items-center justify-center bg-gradient-to-br from-[#17384B] to-[#FF9F8A] text-center text-sm font-black uppercase tracking-[0.24em] text-white md:h-96">
+              UniBestia Offer
             </div>
           )}
+
+          <div className="p-7">
+            <div className="mb-5 flex flex-wrap items-center gap-2">
+              {offer.category && (
+                <span className="rounded-2xl bg-[#F7F6F1] px-3 py-1 text-xs font-bold text-[#526470]">
+                  {offer.category.name}
+                </span>
+              )}
+              {offer.partner && (
+                <span className="inline-flex items-center gap-2 rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-bold text-[#FF7F6E]">
+                  {offer.partner.logoUrl && (
+                    <img
+                      src={offer.partner.logoUrl}
+                      alt={offer.partner.brandName}
+                      className="h-5 w-5 rounded-full object-cover"
+                    />
+                  )}
+                  {offer.partner.brandName}
+                </span>
+              )}
+            </div>
+
+            <h1 className="text-3xl font-bold tracking-tight text-[#17384B] md:text-4xl">
+              {offer.title}
+            </h1>
+
+            {offer.shortDescription && (
+              <p className="mt-4 text-lg leading-8 text-[#526470]">
+                {offer.shortDescription}
+              </p>
+            )}
+
+            <div className="mt-6 rounded-[28px] bg-[#17384B] p-6 text-white">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#FFB5A4]">
+                Выгода
+              </p>
+              <div className="mt-2 text-5xl font-black">
+                {formatBenefit(offer)}
+              </div>
+              {offer.minPurchaseAmount && (
+                <p className="mt-3 text-sm text-[#DDE8EA]">
+                  Минимальная сумма покупки:{" "}
+                  {Number(offer.minPurchaseAmount).toFixed(0)} ₸
+                </p>
+              )}
+            </div>
+
+            {galleryMedia.length > 0 && (
+              <div className="mt-7">
+                <h2 className="text-xl font-bold text-[#17384B]">Фото</h2>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {galleryMedia.map((item) => (
+                    <img
+                      key={item.id}
+                      src={item.fileUrl}
+                      alt={offer.title}
+                      className="h-44 w-full rounded-[24px] object-cover"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-7">
+              <h2 className="text-xl font-bold text-[#17384B]">Описание</h2>
+              <p className="mt-3 whitespace-pre-line leading-7 text-[#526470]">
+                {offer.description}
+              </p>
+            </div>
+
+            {offer.terms && (
+              <div className="mt-7 rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5">
+                <h2 className="text-lg font-bold text-[#17384B]">Условия</h2>
+                <p className="mt-2 whitespace-pre-line leading-7 text-[#526470]">
+                  {offer.terms}
+                </p>
+              </div>
+            )}
+          </div>
         </section>
 
         <aside className="flex flex-col gap-4">
+          {offer.partner && (
+            <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+              <div className="flex items-center gap-4">
+                {offer.partner.logoUrl ? (
+                  <img
+                    src={offer.partner.logoUrl}
+                    alt={offer.partner.brandName}
+                    className="h-16 w-16 rounded-3xl border border-[#E5ECE9] object-cover"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-[#F7F6F1] text-xl font-black text-[#526470]">
+                    {offer.partner.brandName.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9CA3AF]">
+                    Партнёр
+                  </p>
+                  <h2 className="text-xl font-bold text-[#17384B]">
+                    {offer.partner.brandName}
+                  </h2>
+                </div>
+              </div>
+              {offer.partner.description && (
+                <p className="mt-4 text-sm leading-6 text-[#6B7280]">
+                  {offer.partner.description}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
             <h2 className="text-xl font-bold text-[#17384B]">
               Получить скидку
