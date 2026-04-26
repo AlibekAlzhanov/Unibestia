@@ -19,6 +19,8 @@ import {
   Redemption,
   RedemptionStatus,
   Role,
+  StudentVerification,
+  StudentVerificationRequestStatus,
   User,
   UserRole,
   UserStatus,
@@ -49,6 +51,8 @@ export class BusinessRouter {
     private readonly partnerLocationsRepo: Repository<PartnerLocation>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    @InjectRepository(StudentVerification)
+    private readonly studentVerificationsRepo: Repository<StudentVerification>,
     @InjectRepository(AuditLog)
     private readonly auditLogsRepo: Repository<AuditLog>
   ) {}
@@ -2088,6 +2092,679 @@ export class BusinessRouter {
             status: offer.status,
           };
         }),
+
+      listUsers: protectedProcedure
+        .input(
+          z
+            .object({
+              status: z
+                .enum(["active", "blocked", "pending", "disabled"])
+                .optional(),
+              role: z.string().trim().min(1).max(50).optional(),
+              search: z.string().trim().max(120).optional(),
+              limit: z.number().int().min(1).max(200).default(100),
+              offset: z.number().int().min(0).default(0),
+            })
+            .optional()
+        )
+        .query(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
+          const users = await this.usersRepo.find({
+            where: input?.status
+              ? { status: input.status as UserStatus }
+              : {},
+            relations: {
+              userRoles: { role: true },
+              partnerMemberships: { partner: true },
+              studentProfile: true,
+            },
+            order: { createdAt: "DESC" },
+            take: input?.limit ?? 100,
+            skip: input?.offset ?? 0,
+          });
+
+          const search = input?.search?.trim().toLowerCase();
+          const roleFilter = input?.role?.trim().toLowerCase();
+
+          const filtered = users.filter((user) => {
+            const roleCodes = (user.userRoles ?? [])
+              .map((userRole) => userRole.role?.code)
+              .filter((code): code is string => Boolean(code));
+
+            const matchesRole = roleFilter
+              ? roleCodes.some((role) => role.toLowerCase() === roleFilter)
+              : true;
+
+            const matchesSearch = search
+              ? [
+                  user.email,
+                  user.displayName,
+                  user.firstName,
+                  user.lastName,
+                  user.phone,
+                ]
+                  .filter(Boolean)
+                  .some((value) => String(value).toLowerCase().includes(search))
+              : true;
+
+            return matchesRole && matchesSearch;
+          });
+
+          return {
+            total: filtered.length,
+            items: filtered.map((user) => {
+              const roleCodes = (user.userRoles ?? [])
+                .map((userRole) => userRole.role?.code)
+                .filter((code): code is string => Boolean(code));
+
+              const activePartnerMemberships = (user.partnerMemberships ?? [])
+                .filter((membership) => membership.isActive)
+                .map((membership) => ({
+                  id: membership.id,
+                  role: membership.memberRole,
+                  partnerId: membership.partnerId,
+                  partner: membership.partner
+                    ? {
+                        id: membership.partner.id,
+                        brandName: membership.partner.brandName,
+                        status: membership.partner.status,
+                      }
+                    : null,
+                }));
+
+              return {
+                id: user.id,
+                clerkUserId: user.clerkUserId,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                displayName: user.displayName,
+                phone: user.phone,
+                avatarUrl: user.avatarUrl,
+                status: user.status,
+                lastLoginAt: user.lastLoginAt,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+                roles: roleCodes,
+                activePartnerMemberships,
+                hasStudentProfile: Boolean(user.studentProfile),
+              };
+            }),
+          };
+        }),
+
+      updateUserStatus: protectedProcedure
+        .input(
+          z.object({
+            userId: z.string().uuid(),
+            status: z.enum(["active", "blocked", "pending", "disabled"]),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const adminUser = await this.requireAdminUser(ctx);
+
+          const user = await this.usersRepo.findOne({
+            where: { id: input.userId },
+          });
+
+          if (!user) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "User not found",
+            });
+          }
+
+          const previousStatus = user.status;
+          user.status = input.status as UserStatus;
+
+          const saved = await this.usersRepo.save(user);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "user.status_updated",
+            entityType: "user",
+            entityId: saved.id,
+            partnerId: null,
+            metadata: {
+              email: saved.email,
+              previousStatus,
+              newStatus: saved.status,
+            },
+          });
+
+          return {
+            id: saved.id,
+            email: saved.email,
+            status: saved.status,
+          };
+        }),
+
+      listCategories: protectedProcedure
+        .input(
+          z
+            .object({
+              activeOnly: z.boolean().optional(),
+            })
+            .optional()
+        )
+        .query(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
+          const [items, total] = await this.offerCategoriesRepo.findAndCount({
+            where: input?.activeOnly ? { isActive: true } : {},
+            relations: { parent: true },
+            order: { sortOrder: "ASC", name: "ASC" },
+          });
+
+          const offerCounts = await Promise.all(
+            items.map(async (category) => ({
+              categoryId: category.id,
+              totalOffers: await this.offersRepo.count({
+                where: { categoryId: category.id },
+              }),
+              publishedOffers: await this.offersRepo.count({
+                where: {
+                  categoryId: category.id,
+                  status: OfferStatus.PUBLISHED,
+                },
+              }),
+            }))
+          );
+
+          const countsMap = new Map(
+            offerCounts.map((item) => [item.categoryId, item])
+          );
+
+          return {
+            total,
+            items: items.map((category) => {
+              const counts = countsMap.get(category.id);
+
+              return {
+                id: category.id,
+                name: category.name,
+                slug: category.slug,
+                parentId: category.parentId,
+                parent: category.parent
+                  ? {
+                      id: category.parent.id,
+                      name: category.parent.name,
+                      slug: category.parent.slug,
+                    }
+                  : null,
+                sortOrder: category.sortOrder,
+                isActive: category.isActive,
+                createdAt: category.createdAt,
+                totalOffers: counts?.totalOffers ?? 0,
+                publishedOffers: counts?.publishedOffers ?? 0,
+              };
+            }),
+          };
+        }),
+
+      createCategory: protectedProcedure
+        .input(
+          z.object({
+            name: z.string().trim().min(2).max(100),
+            slug: z.string().trim().min(2).max(100).optional(),
+            parentId: z.string().uuid().nullable().optional(),
+            sortOrder: z.number().int().min(0).default(0),
+            isActive: z.boolean().default(true),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const adminUser = await this.requireAdminUser(ctx);
+
+          let slug = this.slugify(input.slug ?? input.name);
+          if (slug === "offer") {
+            slug = "category-" + randomUUID().slice(0, 8);
+          }
+
+          const existing = await this.offerCategoriesRepo.findOne({
+            where: { slug },
+          });
+
+          if (existing) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Category slug already exists",
+            });
+          }
+
+          if (input.parentId) {
+            const parent = await this.offerCategoriesRepo.findOne({
+              where: { id: input.parentId },
+            });
+
+            if (!parent) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Parent category not found",
+              });
+            }
+          }
+
+          const category = this.offerCategoriesRepo.create({
+            name: input.name,
+            slug,
+            parentId: input.parentId ?? null,
+            sortOrder: input.sortOrder,
+            isActive: input.isActive,
+          });
+
+          const saved = await this.offerCategoriesRepo.save(category);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "category.created",
+            entityType: "category",
+            entityId: saved.id,
+            partnerId: null,
+            metadata: {
+              name: saved.name,
+              slug: saved.slug,
+              isActive: saved.isActive,
+              sortOrder: saved.sortOrder,
+            },
+          });
+
+          return {
+            id: saved.id,
+            name: saved.name,
+            slug: saved.slug,
+            parentId: saved.parentId,
+            sortOrder: saved.sortOrder,
+            isActive: saved.isActive,
+            createdAt: saved.createdAt,
+          };
+        }),
+
+      updateCategory: protectedProcedure
+        .input(
+          z.object({
+            categoryId: z.string().uuid(),
+            name: z.string().trim().min(2).max(100).optional(),
+            slug: z.string().trim().min(2).max(100).optional(),
+            parentId: z.string().uuid().nullable().optional(),
+            sortOrder: z.number().int().min(0).optional(),
+            isActive: z.boolean().optional(),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const adminUser = await this.requireAdminUser(ctx);
+
+          const category = await this.offerCategoriesRepo.findOne({
+            where: { id: input.categoryId },
+          });
+
+          if (!category) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Category not found",
+            });
+          }
+
+          const previous = {
+            name: category.name,
+            slug: category.slug,
+            parentId: category.parentId,
+            sortOrder: category.sortOrder,
+            isActive: category.isActive,
+          };
+
+          if (typeof input.name === "string") {
+            category.name = input.name;
+          }
+
+          if (typeof input.slug === "string") {
+            const newSlug = this.slugify(input.slug);
+
+            const existing = await this.offerCategoriesRepo.findOne({
+              where: { slug: newSlug },
+            });
+
+            if (existing && existing.id !== category.id) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: "Category slug already exists",
+              });
+            }
+
+            category.slug = newSlug;
+          }
+
+          if (input.parentId !== undefined) {
+            if (input.parentId === category.id) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Category cannot be its own parent",
+              });
+            }
+
+            if (input.parentId) {
+              const parent = await this.offerCategoriesRepo.findOne({
+                where: { id: input.parentId },
+              });
+
+              if (!parent) {
+                throw new TRPCError({
+                  code: "NOT_FOUND",
+                  message: "Parent category not found",
+                });
+              }
+            }
+
+            category.parentId = input.parentId ?? null;
+          }
+
+          if (typeof input.sortOrder === "number") {
+            category.sortOrder = input.sortOrder;
+          }
+
+          if (typeof input.isActive === "boolean") {
+            category.isActive = input.isActive;
+          }
+
+          const saved = await this.offerCategoriesRepo.save(category);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "category.updated",
+            entityType: "category",
+            entityId: saved.id,
+            partnerId: null,
+            metadata: {
+              previous,
+              current: {
+                name: saved.name,
+                slug: saved.slug,
+                parentId: saved.parentId,
+                sortOrder: saved.sortOrder,
+                isActive: saved.isActive,
+              },
+            },
+          });
+
+          return {
+            id: saved.id,
+            name: saved.name,
+            slug: saved.slug,
+            parentId: saved.parentId,
+            sortOrder: saved.sortOrder,
+            isActive: saved.isActive,
+            createdAt: saved.createdAt,
+          };
+        }),
+
+      listAuditLogs: protectedProcedure
+        .input(
+          z
+            .object({
+              actionGroup: z
+                .enum(["all", "partner", "offer", "redemption", "category", "user"])
+                .default("all"),
+              entityType: z.string().trim().max(50).optional(),
+              actorRole: z.string().trim().max(50).optional(),
+              limit: z.number().int().min(1).max(200).default(100),
+              offset: z.number().int().min(0).default(0),
+            })
+            .optional()
+        )
+        .query(async ({ ctx, input }) => {
+          await this.requireAdminUser(ctx);
+
+          const qb = this.auditLogsRepo
+            .createQueryBuilder("audit")
+            .leftJoinAndSelect("audit.actorUser", "actorUser")
+            .leftJoinAndSelect("audit.partner", "partner")
+            .orderBy("audit.createdAt", "DESC")
+            .take(input?.limit ?? 100)
+            .skip(input?.offset ?? 0);
+
+          if (input?.actionGroup && input.actionGroup !== "all") {
+            qb.andWhere("audit.action LIKE :actionPrefix", {
+              actionPrefix: input.actionGroup + ".%",
+            });
+          }
+
+          if (input?.entityType) {
+            qb.andWhere("audit.entityType = :entityType", {
+              entityType: input.entityType,
+            });
+          }
+
+          if (input?.actorRole) {
+            qb.andWhere("audit.actorRole = :actorRole", {
+              actorRole: input.actorRole,
+            });
+          }
+
+          const [items, total] = await qb.getManyAndCount();
+
+          return {
+            total,
+            items: items.map((auditLog) => ({
+              id: auditLog.id,
+              actorUserId: auditLog.actorUserId,
+              actorRole: auditLog.actorRole,
+              action: auditLog.action,
+              entityType: auditLog.entityType,
+              entityId: auditLog.entityId,
+              partnerId: auditLog.partnerId,
+              metadata: auditLog.metadata,
+              ipAddress: auditLog.ipAddress,
+              userAgent: auditLog.userAgent,
+              createdAt: auditLog.createdAt,
+              actorUser: auditLog.actorUser
+                ? {
+                    id: auditLog.actorUser.id,
+                    email: auditLog.actorUser.email,
+                    displayName: auditLog.actorUser.displayName,
+                  }
+                : null,
+              partner: auditLog.partner
+                ? {
+                    id: auditLog.partner.id,
+                    brandName: auditLog.partner.brandName,
+                    status: auditLog.partner.status,
+                  }
+                : null,
+            })),
+          };
+        }),
+
+      getAdminAnalytics: protectedProcedure.query(async ({ ctx }) => {
+        await this.requireAdminUser(ctx);
+
+        const [
+          totalUsers,
+          activeUsers,
+          blockedUsers,
+          totalPartners,
+          approvedPartners,
+          pendingPartners,
+          totalOffers,
+          draftOffers,
+          pendingOffers,
+          publishedOffers,
+          totalRedemptions,
+          usedRedemptions,
+          pendingVerifications,
+          approvedVerifications,
+          recentAuditLogs,
+        ] = await Promise.all([
+          this.usersRepo.count(),
+          this.usersRepo.count({ where: { status: UserStatus.ACTIVE } }),
+          this.usersRepo.count({ where: { status: UserStatus.BLOCKED } }),
+          this.partnersRepo.count(),
+          this.partnersRepo.count({ where: { status: PartnerStatus.APPROVED } }),
+          this.partnersRepo.count({ where: { status: PartnerStatus.PENDING } }),
+          this.offersRepo.count(),
+          this.offersRepo.count({ where: { status: OfferStatus.DRAFT } }),
+          this.offersRepo.count({ where: { status: OfferStatus.PENDING_REVIEW } }),
+          this.offersRepo.count({ where: { status: OfferStatus.PUBLISHED } }),
+          this.redemptionsRepo.count(),
+          this.redemptionsRepo.count({ where: { status: RedemptionStatus.USED } }),
+          this.studentVerificationsRepo.count({
+            where: { status: StudentVerificationRequestStatus.PENDING },
+          }),
+          this.studentVerificationsRepo.count({
+            where: { status: StudentVerificationRequestStatus.APPROVED },
+          }),
+          this.auditLogsRepo.find({
+            order: { createdAt: "DESC" },
+            take: 8,
+          }),
+        ]);
+
+        const partnerStatusBreakdown = await Promise.all(
+          Object.values(PartnerStatus).map(async (status) => ({
+            status,
+            count: await this.partnersRepo.count({ where: { status } }),
+          }))
+        );
+
+        const offerStatusBreakdown = await Promise.all(
+          Object.values(OfferStatus).map(async (status) => ({
+            status,
+            count: await this.offersRepo.count({ where: { status } }),
+          }))
+        );
+
+        const redemptionStatusBreakdown = await Promise.all(
+          Object.values(RedemptionStatus).map(async (status) => ({
+            status,
+            count: await this.redemptionsRepo.count({ where: { status } }),
+          }))
+        );
+
+        const recentOffers = await this.offersRepo.find({
+          order: { createdAt: "DESC" },
+          take: 8,
+        });
+
+        const partnersMap = await this.getPartnersMap(
+          recentOffers.map((offer) => offer.partnerId)
+        );
+
+        return {
+          metrics: {
+            totalUsers,
+            activeUsers,
+            blockedUsers,
+            totalPartners,
+            approvedPartners,
+            pendingPartners,
+            totalOffers,
+            draftOffers,
+            pendingOffers,
+            publishedOffers,
+            totalRedemptions,
+            usedRedemptions,
+            pendingVerifications,
+            approvedVerifications,
+          },
+          partnerStatusBreakdown,
+          offerStatusBreakdown,
+          redemptionStatusBreakdown,
+          recentOffers: recentOffers.map((offer) => ({
+            id: offer.id,
+            title: offer.title,
+            status: offer.status,
+            createdAt: offer.createdAt,
+            partner: partnersMap.get(offer.partnerId)
+              ? {
+                  id: partnersMap.get(offer.partnerId)!.id,
+                  brandName: partnersMap.get(offer.partnerId)!.brandName,
+                  status: partnersMap.get(offer.partnerId)!.status,
+                }
+              : null,
+          })),
+          recentAuditLogs: recentAuditLogs.map((auditLog) => ({
+            id: auditLog.id,
+            action: auditLog.action,
+            actorRole: auditLog.actorRole,
+            entityType: auditLog.entityType,
+            entityId: auditLog.entityId,
+            createdAt: auditLog.createdAt,
+          })),
+        };
+      }),
+
+      getModerationQueue: protectedProcedure.query(async ({ ctx }) => {
+        await this.requireAdminUser(ctx);
+
+        const [pendingPartners, pendingOffers, pendingVerifications] =
+          await Promise.all([
+            this.partnersRepo.find({
+              where: { status: PartnerStatus.PENDING },
+              order: { createdAt: "DESC" },
+              take: 10,
+            }),
+            this.offersRepo.find({
+              where: { status: OfferStatus.PENDING_REVIEW },
+              order: { createdAt: "DESC" },
+              take: 10,
+            }),
+            this.studentVerificationsRepo.find({
+              where: { status: StudentVerificationRequestStatus.PENDING },
+              relations: { user: true },
+              order: { createdAt: "DESC" },
+              take: 10,
+            }),
+          ]);
+
+        const partnersMap = await this.getPartnersMap(
+          pendingOffers.map((offer) => offer.partnerId)
+        );
+
+        return {
+          counts: {
+            pendingPartners: pendingPartners.length,
+            pendingOffers: pendingOffers.length,
+            pendingVerifications: pendingVerifications.length,
+          },
+          pendingPartners: pendingPartners.map((partner) => ({
+            id: partner.id,
+            brandName: partner.brandName,
+            legalName: partner.legalName,
+            contactEmail: partner.contactEmail,
+            status: partner.status,
+            createdAt: partner.createdAt,
+          })),
+          pendingOffers: pendingOffers.map((offer) => ({
+            id: offer.id,
+            title: offer.title,
+            status: offer.status,
+            createdAt: offer.createdAt,
+            partner: partnersMap.get(offer.partnerId)
+              ? {
+                  id: partnersMap.get(offer.partnerId)!.id,
+                  brandName: partnersMap.get(offer.partnerId)!.brandName,
+                  status: partnersMap.get(offer.partnerId)!.status,
+                }
+              : null,
+          })),
+          pendingVerifications: pendingVerifications.map((verification) => ({
+            id: verification.id,
+            method: verification.method,
+            status: verification.status,
+            submittedEmail: verification.submittedEmail,
+            createdAt: verification.createdAt,
+            user: verification.user
+              ? {
+                  id: verification.user.id,
+                  email: verification.user.email,
+                  displayName: verification.user.displayName,
+                }
+              : null,
+          })),
+        };
+      }),
 
       getDashboard: protectedProcedure.query(async ({ ctx }) => {
         await this.requireAdminUser(ctx);
