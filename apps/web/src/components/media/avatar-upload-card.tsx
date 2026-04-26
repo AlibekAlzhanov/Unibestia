@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useAuth } from "@clerk/nextjs";
 import { type JSX, useMemo, useState } from "react";
 import { getBackendApiUrl } from "@/utils/backend-api-url";

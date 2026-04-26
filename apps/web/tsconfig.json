@@ -1,7 +1,7 @@
 {
   "extends": "@repo/typescript-config/nextjs",
   "compilerOptions": {
-    "baseUrl": ".",
+    "ignoreDeprecations": "5.0",
     "plugins": [
       {
         "name": "next"
