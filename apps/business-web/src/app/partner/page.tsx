@@ -6,12 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
 import { PartnerLogoUploadCard } from "@/components/media/partner-logo-upload-card";
 
-const sections = [
-  {
-    href: "/partner/offers",
-    title: "Скидки",
-    description: "Создание, редактирование, публикация и архивирование офферов.",
-  },
+const readSections = [
   {
     href: "/partner/redemptions",
     title: "Использования",
@@ -21,6 +16,14 @@ const sections = [
     href: "/partner/analytics",
     title: "Аналитика",
     description: "Популярные скидки, динамика использований и эффективность.",
+  },
+];
+
+const manageSections = [
+  {
+    href: "/partner/offers",
+    title: "Скидки",
+    description: "Создание, редактирование, публикация и архивирование офферов.",
   },
   {
     href: "/partner/locations",
@@ -45,8 +48,14 @@ export default function PartnerDashboardPage(): JSX.Element {
   const dashboardQuery = useQuery(
     trpc.business.partner.getDashboard.queryOptions()
   );
+  const meQuery = useQuery(trpc.business.auth.getMe.queryOptions());
 
   const data = dashboardQuery.data;
+  const role = meQuery.data?.membership?.role;
+  const canManage = role === "owner" || role === "manager";
+  const visibleSections = canManage
+    ? [...manageSections, ...readSections]
+    : readSections;
 
   const metrics = [
     {
@@ -75,11 +84,13 @@ export default function PartnerDashboardPage(): JSX.Element {
     <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1280px] px-4 py-10 md:px-6 lg:px-8">
       <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
 
-        <PartnerLogoUploadCard
-          logoUrl={data?.partner?.logoUrl}
-          getToken={getToken}
-          onUploaded={() => dashboardQuery.refetch()}
-        />
+        {canManage && (
+          <PartnerLogoUploadCard
+            logoUrl={data?.partner?.logoUrl}
+            getToken={getToken}
+            onUploaded={() => dashboardQuery.refetch()}
+          />
+        )}
 
         <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
           Partner Dashboard
@@ -115,7 +126,7 @@ export default function PartnerDashboardPage(): JSX.Element {
       </section>
 
       <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {sections.map((section) => (
+        {visibleSections.map((section) => (
           <Link
             key={section.href}
             href={section.href}

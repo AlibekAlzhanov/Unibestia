@@ -236,6 +236,49 @@ export class BusinessRouter {
     };
   }
 
+  private assertPartnerRole(
+    membership: PartnerMember,
+    allowedRoles: PartnerMemberRole[],
+    message: string
+  ): void {
+    if (!allowedRoles.includes(membership.memberRole)) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message,
+      });
+    }
+  }
+
+  private assertPartnerManageAccess(membership: PartnerMember): void {
+    this.assertPartnerRole(
+      membership,
+      [PartnerMemberRole.OWNER, PartnerMemberRole.MANAGER],
+      "Only partner owner or manager can manage this resource"
+    );
+  }
+
+  private assertPartnerOwnerAccess(membership: PartnerMember): void {
+    this.assertPartnerRole(
+      membership,
+      [PartnerMemberRole.OWNER],
+      "Only partner owner can perform this action"
+    );
+  }
+
+  private assertPartnerReadOnlyOrManageAccess(
+    membership: PartnerMember
+  ): void {
+    this.assertPartnerRole(
+      membership,
+      [
+        PartnerMemberRole.OWNER,
+        PartnerMemberRole.MANAGER,
+        PartnerMemberRole.ANALYST,
+      ],
+      "Partner dashboard access is required"
+    );
+  }
+
   private slugify(value: string): string {
     const normalized = value
       .toLowerCase()
@@ -612,12 +655,14 @@ export class BusinessRouter {
         }),
 
       getDashboard: protectedProcedure.query(async ({ ctx }) => {
-        const { partner } = await this.requireMyPartner(ctx);
+        const { partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerReadOnlyOrManageAccess(membership);
         return this.buildPartnerSummary(partner);
       }),
 
       listStaffMembers: protectedProcedure.query(async ({ ctx }) => {
-        const { partner } = await this.requireMyPartner(ctx);
+        const { partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerManageAccess(membership);
 
         const members = await this.partnerMembersRepo.find({
           where: { partnerId: partner.id },
@@ -661,6 +706,12 @@ export class BusinessRouter {
         )
         .mutation(async ({ ctx, input }) => {
           const { partner, membership } = await this.requireMyPartner(ctx);
+
+          if (input.role === "manager") {
+            this.assertPartnerOwnerAccess(membership);
+          } else {
+            this.assertPartnerManageAccess(membership);
+          }
 
           if (
             membership.memberRole !== PartnerMemberRole.OWNER &&
@@ -753,6 +804,12 @@ export class BusinessRouter {
         )
         .mutation(async ({ ctx, input }) => {
           const { partner, membership } = await this.requireMyPartner(ctx);
+
+          if (input.role === "manager") {
+            this.assertPartnerOwnerAccess(membership);
+          } else {
+            this.assertPartnerManageAccess(membership);
+          }
 
           if (
             membership.memberRole !== PartnerMemberRole.OWNER &&
@@ -855,7 +912,8 @@ export class BusinessRouter {
         }),
 
       listLocations: protectedProcedure.query(async ({ ctx }) => {
-        const { partner } = await this.requireMyPartner(ctx);
+        const { partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerReadOnlyOrManageAccess(membership);
 
         const items = await this.partnerLocationsRepo.find({
           where: { partnerId: partner.id },
@@ -892,7 +950,8 @@ export class BusinessRouter {
           })
         )
         .mutation(async ({ ctx, input }) => {
-          const { partner } = await this.requireMyPartner(ctx);
+          const { partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerManageAccess(membership);
 
           const location = this.partnerLocationsRepo.create({
             partnerId: partner.id,
@@ -949,7 +1008,8 @@ export class BusinessRouter {
           })
         )
         .mutation(async ({ ctx, input }) => {
-          const { partner } = await this.requireMyPartner(ctx);
+          const { partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerManageAccess(membership);
 
           const category = await this.offerCategoriesRepo.findOne({
             where: { id: input.categoryId, isActive: true },
