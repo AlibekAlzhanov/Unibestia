@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import {
+  AuditLog,
   Offer,
   OfferLocation,
   OfferStatus,
@@ -13,6 +14,17 @@ import {
   User,
 } from "@repo/db";
 
+export type CreateAuditLogInput = {
+  actorUserId?: string | null;
+  actorRole?: string | null;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  partnerId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
 @Injectable()
 export class RedemptionsRepository {
   constructor(
@@ -29,8 +41,26 @@ export class RedemptionsRepository {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     @InjectRepository(Partner)
-    private readonly partnersRepo: Repository<Partner>
+    private readonly partnersRepo: Repository<Partner>,
+    @InjectRepository(AuditLog)
+    private readonly auditLogsRepo: Repository<AuditLog>
   ) {}
+
+  async createAuditLog(input: CreateAuditLogInput): Promise<void> {
+    const auditLog = this.auditLogsRepo.create({
+      actorUserId: input.actorUserId ?? null,
+      actorRole: input.actorRole ?? null,
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId ?? null,
+      partnerId: input.partnerId ?? null,
+      metadata: input.metadata ?? null,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+    });
+
+    await this.auditLogsRepo.save(auditLog);
+  }
 
   async findPublishedOfferById(offerId: string): Promise<Offer | null> {
     return this.offersRepo.findOne({

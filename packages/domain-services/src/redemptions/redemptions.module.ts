@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
+  AuditLog,
   Offer,
   OfferLocation,
   Partner,
@@ -15,6 +16,7 @@ import { RedemptionsService } from "./services/redemptions.service.js";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      AuditLog,
       Redemption,
       Offer,
       StudentProfile,

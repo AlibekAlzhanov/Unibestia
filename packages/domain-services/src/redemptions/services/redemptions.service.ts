@@ -149,6 +149,20 @@ export class RedemptionsService {
       cancelledAt: null,
     });
 
+    await this.writeRedemptionAuditLog({
+    action: "redemption.created",
+    actorUserId: input.userId,
+    actorRole: "student",
+    redemptionId: redemption.id,
+    partnerId: redemption.partnerId,
+    metadata: {
+      offerId: redemption.offerId,
+      locationId: redemption.locationId,
+      qrExpiresAt: redemption.qrExpiresAt?.toISOString() ?? null,
+      ttlSeconds: QR_TOKEN_TTL_MINUTES * 60,
+    },
+  });
+
     return {
       id: redemption.id,
       userId: redemption.userId,
@@ -171,6 +185,21 @@ export class RedemptionsService {
 
   async validateByQrToken(input: ValidateRedemptionByQrTokenInput) {
     const redemption = await this.findUsableRedemptionByQrToken(input);
+
+    await this.writeRedemptionAuditLog({
+      action: "redemption.validated",
+      actorUserId: input.operatorUserId,
+      actorRole: this.getAuditActorRole(input),
+      redemptionId: redemption.id,
+      partnerId: redemption.partnerId,
+      metadata: {
+        offerId: redemption.offerId,
+        locationId: redemption.locationId,
+        operatorPartnerId: input.operatorPartnerId,
+        isAdmin: input.isAdmin,
+      },
+    });
+
     return this.buildStaffRedemptionResponse(redemption);
   }
 
@@ -217,6 +246,21 @@ export class RedemptionsService {
     redemption.usedAt = new Date();
 
     const saved = await this.redemptionsRepository.saveRedemption(redemption);
+    await this.writeRedemptionAuditLog({
+      action: "redemption.confirmed",
+      actorUserId: input.operatorUserId,
+      actorRole: this.getAuditActorRole(input),
+      redemptionId: saved.id,
+      partnerId: saved.partnerId,
+      metadata: {
+        offerId: saved.offerId,
+        locationId: saved.locationId,
+        orderAmount: saved.orderAmount,
+        discountAmount: saved.discountAmount,
+        operatorPartnerId: input.operatorPartnerId,
+        isAdmin: input.isAdmin,
+      },
+    });
     return this.buildStaffRedemptionResponse(saved);
   }
 
@@ -227,6 +271,19 @@ export class RedemptionsService {
     redemption.cancelledAt = new Date();
 
     const saved = await this.redemptionsRepository.saveRedemption(redemption);
+    await this.writeRedemptionAuditLog({
+      action: "redemption.cancelled",
+      actorUserId: input.operatorUserId,
+      actorRole: this.getAuditActorRole(input),
+      redemptionId: saved.id,
+      partnerId: saved.partnerId,
+      metadata: {
+        offerId: saved.offerId,
+        locationId: saved.locationId,
+        operatorPartnerId: input.operatorPartnerId,
+        isAdmin: input.isAdmin,
+      },
+    });
     return this.buildStaffRedemptionResponse(saved);
   }
 
@@ -347,6 +404,43 @@ export class RedemptionsService {
     };
   }
 
+  private getAuditActorRole(operator: QrOperatorInput): string {
+    return operator.isAdmin ? "admin" : "partner_operator";
+  }
+
+  private maskQrToken(qrToken: string): string {
+    if (qrToken.length <= 12) {
+      return "***";
+    }
+
+    return `${qrToken.slice(0, 8)}...${qrToken.slice(-4)}`;
+  }
+
+  private async writeRedemptionAuditLog(input: {
+    action: string;
+    actorUserId?: string | null;
+    actorRole?: string | null;
+    redemptionId?: string | null;
+    partnerId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }): Promise<void> {
+    try {
+      await this.redemptionsRepository.createAuditLog({
+        actorUserId: input.actorUserId ?? null,
+        actorRole: input.actorRole ?? null,
+        action: input.action,
+        entityType: "redemption",
+        entityId: input.redemptionId ?? null,
+        partnerId: input.partnerId ?? null,
+        metadata: input.metadata ?? null,
+        ipAddress: null,
+        userAgent: null,
+      });
+    } catch {
+      // Audit logging must not break the QR flow.
+    }
+  }
+
   private generateSecureQrToken(): string {
     return `${QR_TOKEN_PREFIX}${randomBytes(QR_TOKEN_BYTES).toString(
       "base64url"
@@ -363,19 +457,44 @@ export class RedemptionsService {
     }
   }
 
-  private assertOperatorCanAccessRedemption(
+  private async assertOperatorCanAccessRedemption(
     redemption: Redemption,
     operator: QrOperatorInput
-  ): void {
+  ): Promise<void> {
     if (operator.isAdmin) {
       return;
     }
 
     if (!operator.operatorPartnerId) {
+      await this.writeRedemptionAuditLog({
+        action: "redemption.access_denied",
+        actorUserId: operator.operatorUserId,
+        actorRole: this.getAuditActorRole(operator),
+        redemptionId: redemption.id,
+        partnerId: redemption.partnerId,
+        metadata: {
+          reason: "missing_operator_partner",
+          offerId: redemption.offerId,
+        },
+      });
+
       throw new BadRequestException("Partner operator is required");
     }
 
     if (redemption.partnerId !== operator.operatorPartnerId) {
+      await this.writeRedemptionAuditLog({
+        action: "redemption.access_denied",
+        actorUserId: operator.operatorUserId,
+        actorRole: this.getAuditActorRole(operator),
+        redemptionId: redemption.id,
+        partnerId: redemption.partnerId,
+        metadata: {
+          reason: "partner_mismatch",
+          offerId: redemption.offerId,
+          operatorPartnerId: operator.operatorPartnerId,
+        },
+      });
+
       throw new NotFoundException("Redemption not found for this partner");
     }
   }
@@ -387,20 +506,72 @@ export class RedemptionsService {
       await this.redemptionsRepository.findRedemptionByQrToken(input.qrToken);
 
     if (!redemption) {
+      await this.writeRedemptionAuditLog({
+        action: "redemption.qr_lookup_failed",
+        actorUserId: input.operatorUserId,
+        actorRole: this.getAuditActorRole(input),
+        redemptionId: null,
+        partnerId: input.operatorPartnerId,
+        metadata: {
+          reason: "not_found",
+          qrTokenPreview: this.maskQrToken(input.qrToken),
+          isAdmin: input.isAdmin,
+        },
+      });
+
       throw new NotFoundException("Redemption not found");
     }
 
-    this.assertOperatorCanAccessRedemption(redemption, input);
+    await this.assertOperatorCanAccessRedemption(redemption, input);
 
     if (redemption.status === RedemptionStatus.USED) {
+      await this.writeRedemptionAuditLog({
+        action: "redemption.qr_use_rejected",
+        actorUserId: input.operatorUserId,
+        actorRole: this.getAuditActorRole(input),
+        redemptionId: redemption.id,
+        partnerId: redemption.partnerId,
+        metadata: {
+          reason: "already_used",
+          offerId: redemption.offerId,
+          operatorPartnerId: input.operatorPartnerId,
+        },
+      });
+
       throw new BadRequestException("Redemption has already been used");
     }
 
     if (redemption.status === RedemptionStatus.CANCELLED) {
+      await this.writeRedemptionAuditLog({
+        action: "redemption.qr_use_rejected",
+        actorUserId: input.operatorUserId,
+        actorRole: this.getAuditActorRole(input),
+        redemptionId: redemption.id,
+        partnerId: redemption.partnerId,
+        metadata: {
+          reason: "cancelled",
+          offerId: redemption.offerId,
+          operatorPartnerId: input.operatorPartnerId,
+        },
+      });
+
       throw new BadRequestException("Redemption has been cancelled");
     }
 
     if (redemption.status === RedemptionStatus.EXPIRED) {
+      await this.writeRedemptionAuditLog({
+        action: "redemption.qr_use_rejected",
+        actorUserId: input.operatorUserId,
+        actorRole: this.getAuditActorRole(input),
+        redemptionId: redemption.id,
+        partnerId: redemption.partnerId,
+        metadata: {
+          reason: "already_expired",
+          offerId: redemption.offerId,
+          operatorPartnerId: input.operatorPartnerId,
+        },
+      });
+
       throw new BadRequestException("Redemption has expired");
     }
 
@@ -409,6 +580,21 @@ export class RedemptionsService {
     if (redemption.qrExpiresAt && redemption.qrExpiresAt <= now) {
       redemption.status = RedemptionStatus.EXPIRED;
       await this.redemptionsRepository.saveRedemption(redemption);
+
+      await this.writeRedemptionAuditLog({
+        action: "redemption.expired",
+        actorUserId: input.operatorUserId,
+        actorRole: this.getAuditActorRole(input),
+        redemptionId: redemption.id,
+        partnerId: redemption.partnerId,
+        metadata: {
+          reason: "ttl_expired",
+          offerId: redemption.offerId,
+          qrExpiresAt: redemption.qrExpiresAt.toISOString(),
+          operatorPartnerId: input.operatorPartnerId,
+        },
+      });
+
       throw new BadRequestException("QR token has expired");
     }
 
