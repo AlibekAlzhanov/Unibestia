@@ -1,15 +1,81 @@
 "use client";
 
 import Link from "next/link";
-import { type JSX } from "react";
+import { useRouter } from "next/navigation";
+import { type JSX, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
 
+function statusLabel(status?: string | null): string {
+  const labels: Record<string, string> = {
+    pending: "На модерации",
+    approved: "Одобрен",
+    rejected: "Отклонён",
+    suspended: "Заблокирован",
+    archived: "Архив",
+  };
+
+  return status ? labels[status] ?? status : "—";
+}
+
+function statusTitle(status?: string | null): string {
+  if (status === "approved") {
+    return "Заявка одобрена";
+  }
+
+  if (status === "rejected") {
+    return "Заявка отклонена";
+  }
+
+  if (status === "suspended") {
+    return "Аккаунт партнёра заблокирован";
+  }
+
+  if (status === "archived") {
+    return "Заявка в архиве";
+  }
+
+  return "Заявка на модерации";
+}
+
+function statusDescription(status?: string | null): string {
+  if (status === "approved") {
+    return "Администратор одобрил заявку. Теперь доступен кабинет партнёра.";
+  }
+
+  if (status === "rejected") {
+    return "Администратор отклонил заявку. Причина указана ниже.";
+  }
+
+  if (status === "suspended") {
+    return "Партнёрский аккаунт временно заблокирован. Причина указана ниже.";
+  }
+
+  if (status === "archived") {
+    return "Заявка или партнёрский аккаунт был перенесён в архив.";
+  }
+
+  return "После одобрения администратором появится доступ к кабинету партнёра: скидки, точки продаж, аналитика и история QR.";
+}
+
 export default function PartnerPendingPage(): JSX.Element {
+  const router = useRouter();
   const trpc = useTRPC();
   const meQuery = useQuery(trpc.business.auth.getMe.queryOptions());
 
   const partner = meQuery.data?.partner;
+  const status = partner?.status ?? null;
+
+  useEffect(() => {
+    if (meQuery.data?.businessAccess === "admin") {
+      router.replace("/admin");
+      return;
+    }
+
+    if (meQuery.data?.businessAccess === "partner") {
+      router.replace("/partner");
+    }
+  }, [meQuery.data?.businessAccess, router]);
 
   return (
     <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[900px] px-4 py-10 md:px-6 lg:px-8">
@@ -18,7 +84,7 @@ export default function PartnerPendingPage(): JSX.Element {
           Partner Status
         </p>
         <h1 className="mt-2 text-3xl font-black text-[#17384B]">
-          Заявка на модерации
+          {statusTitle(status)}
         </h1>
 
         {meQuery.isLoading ? (
@@ -31,12 +97,15 @@ export default function PartnerPendingPage(): JSX.Element {
             </p>
             <p className="mt-2 text-sm text-[#6B7280]">
               Статус:{" "}
-              <span className="font-black text-[#FF7F6E]">{partner.status}</span>
+              <span className="font-black text-[#FF7F6E]">
+                {statusLabel(partner.status)}
+              </span>
             </p>
             {partner.rejectionReason && (
-              <p className="mt-2 text-sm text-red-700">
-                Причина: {partner.rejectionReason}
-              </p>
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <span className="font-black">Причина:</span>{" "}
+                {partner.rejectionReason}
+              </div>
             )}
           </div>
         ) : (
@@ -46,22 +115,43 @@ export default function PartnerPendingPage(): JSX.Element {
         )}
 
         <p className="mt-5 leading-7 text-[#6B7280]">
-          После одобрения администратором появится доступ к кабинету партнёра:
-          скидки, точки продаж, аналитика и история QR.
+          {statusDescription(status)}
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
+          {status === "approved" && (
+            <Link
+              href="/partner"
+              className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white"
+            >
+              Открыть кабинет
+            </Link>
+          )}
+
+          {!partner && (
+            <Link
+              href="/partner/apply"
+              className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white"
+            >
+              Подать заявку
+            </Link>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              void meQuery.refetch();
+            }}
+            className="rounded-2xl border border-[#D8E3DE] px-5 py-3 text-sm font-bold text-[#17384B]"
+          >
+            Обновить статус
+          </button>
+
           <Link
             href="/"
             className="rounded-2xl border border-[#D8E3DE] px-5 py-3 text-sm font-bold text-[#17384B]"
           >
             На главную
-          </Link>
-          <Link
-            href="/partner/apply"
-            className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white"
-          >
-            Подать заявку
           </Link>
         </div>
       </section>

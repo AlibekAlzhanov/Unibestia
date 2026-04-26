@@ -2,12 +2,28 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type JSX, useState } from "react";
-import { useTRPCClient } from "@/utils/trpc";
+import { type FormEvent, type JSX, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC, useTRPCClient } from "@/utils/trpc";
+
+function statusLabel(status?: string | null): string {
+  const labels: Record<string, string> = {
+    pending: "На модерации",
+    approved: "Одобрен",
+    rejected: "Отклонён",
+    suspended: "Заблокирован",
+    archived: "Архив",
+  };
+
+  return status ? labels[status] ?? status : "—";
+}
 
 export default function PartnerApplyPage(): JSX.Element {
   const router = useRouter();
+  const trpc = useTRPC();
   const trpcClient = useTRPCClient();
+
+  const meQuery = useQuery(trpc.business.auth.getMe.queryOptions());
 
   const [legalName, setLegalName] = useState("");
   const [brandName, setBrandName] = useState("");
@@ -21,8 +37,33 @@ export default function PartnerApplyPage(): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const access = meQuery.data?.businessAccess;
+  const partner = meQuery.data?.partner;
+  const hasExistingPartnerApplication = Boolean(meQuery.data?.membership);
+
+  useEffect(() => {
+    if (access === "admin") {
+      router.replace("/admin");
+      return;
+    }
+
+    if (access === "partner") {
+      router.replace("/partner");
+      return;
+    }
+
+    if (access === "partner_pending") {
+      router.replace("/partner/pending");
+    }
+  }, [access, router]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+
+    if (hasExistingPartnerApplication) {
+      setError("У вашего аккаунта уже есть заявка или партнёрский доступ.");
+      return;
+    }
 
     setIsSaving(true);
     setMessage(null);
@@ -44,6 +85,8 @@ export default function PartnerApplyPage(): JSX.Element {
         `Заявка отправлена: ${created.partner.brandName} (${created.partner.status})`
       );
 
+      await meQuery.refetch();
+
       setTimeout(() => {
         router.push("/partner/pending");
       }, 700);
@@ -56,6 +99,67 @@ export default function PartnerApplyPage(): JSX.Element {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  if (meQuery.isLoading) {
+    return (
+      <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[980px] px-4 py-10 md:px-6 lg:px-8">
+        <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-[#6B7280]">Проверяем текущий статус...</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (
+    hasExistingPartnerApplication &&
+    access !== "no_access" &&
+    access !== undefined
+  ) {
+    return (
+      <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[980px] px-4 py-10 md:px-6 lg:px-8">
+        <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
+            Partner Application
+          </p>
+          <h1 className="mt-2 text-3xl font-black text-[#17384B]">
+            Заявка уже существует
+          </h1>
+
+          <div className="mt-5 rounded-[24px] bg-[#F9FAF8] p-5">
+            <p className="font-bold text-[#17384B]">
+              {partner?.brandName ?? "Партнёр"}
+            </p>
+            <p className="mt-2 text-sm text-[#6B7280]">
+              Статус:{" "}
+              <span className="font-black text-[#FF7F6E]">
+                {statusLabel(partner?.status)}
+              </span>
+            </p>
+            {partner?.rejectionReason && (
+              <p className="mt-2 text-sm text-red-700">
+                Причина: {partner.rejectionReason}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/partner/pending"
+              className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white"
+            >
+              Проверить статус
+            </Link>
+            <Link
+              href="/"
+              className="rounded-2xl border border-[#D8E3DE] px-5 py-3 text-sm font-bold text-[#17384B]"
+            >
+              Назад
+            </Link>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   return (
@@ -72,8 +176,8 @@ export default function PartnerApplyPage(): JSX.Element {
           Заявка на подключение партнёра
         </h1>
         <p className="mt-3 max-w-2xl text-[#6B7280]">
-          После отправки компания получит статус pending. Админ должен одобрить
-          партнёра в разделе /admin/partners.
+          После отправки компания получит статус pending. Администратор
+          проверит заявку и примет решение.
         </p>
       </section>
 
@@ -141,9 +245,7 @@ export default function PartnerApplyPage(): JSX.Element {
             </label>
 
             <label>
-              <span className="text-sm font-bold text-[#17384B]">
-                Телефон
-              </span>
+              <span className="text-sm font-bold text-[#17384B]">Телефон</span>
               <input
                 value={contactPhone}
                 onChange={(event) => setContactPhone(event.target.value)}
