@@ -187,7 +187,7 @@ export class BusinessRouter {
 
       await this.auditLogsRepo.save(auditLog);
     } catch {
-      // Audit logging must not break partner lifecycle flow.
+      // Audit logging must not break partner/business flow.
     }
   }
 
@@ -374,12 +374,17 @@ export class BusinessRouter {
     return new Map(partners.map((partner) => [partner.id, partner]));
   }
 
-  private async updateOfferStatus(
-    offerId: string,
-    status: OfferStatus
-  ): Promise<Offer> {
+  private async updateOfferLifecycleStatus(input: {
+    offerId: string;
+    status: OfferStatus;
+    actorUserId: string;
+    actorRole: string;
+    action: string;
+    reason?: string | null;
+  }): Promise<Offer> {
     const offer = await this.offersRepo.findOne({
-      where: { id: offerId },
+      where: { id: input.offerId },
+      relations: { partner: true },
     });
 
     if (!offer) {
@@ -389,17 +394,60 @@ export class BusinessRouter {
       });
     }
 
-    offer.status = status;
+    const previousStatus = offer.status;
 
-    if (status === OfferStatus.PUBLISHED) {
+    if (
+      input.status === OfferStatus.PUBLISHED &&
+      offer.status !== OfferStatus.APPROVED &&
+      offer.status !== OfferStatus.PENDING_REVIEW
+    ) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Only approved or pending review offers can be published",
+      });
+    }
+
+    if (
+      input.status === OfferStatus.APPROVED &&
+      offer.status === OfferStatus.ARCHIVED
+    ) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Archived offer cannot be approved",
+      });
+    }
+
+    offer.status = input.status;
+    offer.updatedByUserId = input.actorUserId;
+
+    if (input.status === OfferStatus.PUBLISHED) {
       offer.publishedAt = new Date();
     }
 
-    if (status !== OfferStatus.PUBLISHED) {
+    if (input.status !== OfferStatus.PUBLISHED) {
       offer.publishedAt = null;
     }
 
-    return this.offersRepo.save(offer);
+    const saved = await this.offersRepo.save(offer);
+
+    await this.writeBusinessAuditLog({
+      actorUserId: input.actorUserId,
+      actorRole: input.actorRole,
+      action: input.action,
+      entityType: "offer",
+      entityId: saved.id,
+      partnerId: saved.partnerId,
+      metadata: {
+        title: saved.title,
+        slug: saved.slug,
+        partnerId: saved.partnerId,
+        previousStatus,
+        newStatus: saved.status,
+        reason: input.reason ?? null,
+      },
+    });
+
+    return saved;
   }
 
   private async buildPartnerSummary(partner: Partner | null) {
@@ -1054,7 +1102,7 @@ export class BusinessRouter {
           })
         )
         .mutation(async ({ ctx, input }) => {
-          const { partner, membership } = await this.requireMyPartner(ctx);
+          const { user, partner, membership } = await this.requireMyPartner(ctx);
           this.assertPartnerManageAccess(membership);
 
           const category = await this.offerCategoriesRepo.findOne({
@@ -1164,8 +1212,8 @@ export class BusinessRouter {
               : OfferStatus.DRAFT,
             isFeatured: false,
             publishedAt: null,
-            createdByUserId: partner.createdByUserId,
-            updatedByUserId: null,
+            createdByUserId: user.id,
+            updatedByUserId: user.id,
           });
 
           const saved = await this.offersRepo.save(offer);
@@ -1206,6 +1254,38 @@ export class BusinessRouter {
                 })
               )
             );
+          }
+
+          await this.writeBusinessAuditLog({
+            actorUserId: user.id,
+            actorRole: membership.memberRole,
+            action: "offer.created",
+            entityType: "offer",
+            entityId: saved.id,
+            partnerId: partner.id,
+            metadata: {
+              title: saved.title,
+              slug: saved.slug,
+              status: saved.status,
+              categoryId: saved.categoryId,
+              locationIds: selectedLocations.map((location) => location.id),
+            },
+          });
+
+          if (saved.status === OfferStatus.PENDING_REVIEW) {
+            await this.writeBusinessAuditLog({
+              actorUserId: user.id,
+              actorRole: membership.memberRole,
+              action: "offer.submitted_for_review",
+              entityType: "offer",
+              entityId: saved.id,
+              partnerId: partner.id,
+              metadata: {
+                title: saved.title,
+                slug: saved.slug,
+                source: "create_offer",
+              },
+            });
           }
 
           return {
@@ -1299,6 +1379,64 @@ export class BusinessRouter {
                 },
               };
             }),
+          };
+        }),
+
+      submitOfferForReview: protectedProcedure
+        .input(z.object({ offerId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          const { user, partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerManageAccess(membership);
+
+          const offer = await this.offersRepo.findOne({
+            where: { id: input.offerId, partnerId: partner.id },
+          });
+
+          if (!offer) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Offer not found",
+            });
+          }
+
+          if (
+            offer.status !== OfferStatus.DRAFT &&
+            offer.status !== OfferStatus.REJECTED
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Only draft or rejected offers can be submitted for review",
+            });
+          }
+
+          const previousStatus = offer.status;
+
+          offer.status = OfferStatus.PENDING_REVIEW;
+          offer.publishedAt = null;
+          offer.updatedByUserId = user.id;
+
+          const saved = await this.offersRepo.save(offer);
+
+          await this.writeBusinessAuditLog({
+            actorUserId: user.id,
+            actorRole: membership.memberRole,
+            action: "offer.submitted_for_review",
+            entityType: "offer",
+            entityId: saved.id,
+            partnerId: saved.partnerId,
+            metadata: {
+              title: saved.title,
+              slug: saved.slug,
+              previousStatus,
+              newStatus: saved.status,
+            },
+          });
+
+          return {
+            id: saved.id,
+            title: saved.title,
+            slug: saved.slug,
+            status: saved.status,
           };
         }),
 
@@ -1441,7 +1579,13 @@ export class BusinessRouter {
           z
             .object({
               status: z
-                .enum(["pending", "approved", "rejected", "suspended", "archived"])
+                .enum([
+                  "pending",
+                  "approved",
+                  "rejected",
+                  "suspended",
+                  "archived",
+                ])
                 .optional(),
               limit: z.number().int().min(1).max(100).default(100),
               offset: z.number().int().min(0).default(0),
@@ -1849,12 +1993,15 @@ export class BusinessRouter {
       approveOffer: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
         .mutation(async ({ ctx, input }) => {
-          await this.requireAdminUser(ctx);
+          const adminUser = await this.requireAdminUser(ctx);
 
-          const offer = await this.updateOfferStatus(
-            input.offerId,
-            OfferStatus.APPROVED
-          );
+          const offer = await this.updateOfferLifecycleStatus({
+            offerId: input.offerId,
+            status: OfferStatus.APPROVED,
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "offer.approved",
+          });
 
           return {
             id: offer.id,
@@ -1867,12 +2014,15 @@ export class BusinessRouter {
       publishOffer: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
         .mutation(async ({ ctx, input }) => {
-          await this.requireAdminUser(ctx);
+          const adminUser = await this.requireAdminUser(ctx);
 
-          const offer = await this.updateOfferStatus(
-            input.offerId,
-            OfferStatus.PUBLISHED
-          );
+          const offer = await this.updateOfferLifecycleStatus({
+            offerId: input.offerId,
+            status: OfferStatus.PUBLISHED,
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "offer.published",
+          });
 
           return {
             id: offer.id,
@@ -1884,14 +2034,24 @@ export class BusinessRouter {
         }),
 
       rejectOffer: protectedProcedure
-        .input(z.object({ offerId: z.string().uuid() }))
+        .input(
+          z.object({
+            offerId: z.string().uuid(),
+            reason: z.string().trim().min(3).max(2000).optional(),
+          })
+        )
         .mutation(async ({ ctx, input }) => {
-          await this.requireAdminUser(ctx);
+          const adminUser = await this.requireAdminUser(ctx);
+          const reason = input.reason ?? "Rejected by admin";
 
-          const offer = await this.updateOfferStatus(
-            input.offerId,
-            OfferStatus.REJECTED
-          );
+          const offer = await this.updateOfferLifecycleStatus({
+            offerId: input.offerId,
+            status: OfferStatus.REJECTED,
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "offer.rejected",
+            reason,
+          });
 
           return {
             id: offer.id,
@@ -1902,14 +2062,24 @@ export class BusinessRouter {
         }),
 
       archiveOffer: protectedProcedure
-        .input(z.object({ offerId: z.string().uuid() }))
+        .input(
+          z.object({
+            offerId: z.string().uuid(),
+            reason: z.string().trim().min(3).max(2000).optional(),
+          })
+        )
         .mutation(async ({ ctx, input }) => {
-          await this.requireAdminUser(ctx);
+          const adminUser = await this.requireAdminUser(ctx);
+          const reason = input.reason ?? "Archived by admin";
 
-          const offer = await this.updateOfferStatus(
-            input.offerId,
-            OfferStatus.ARCHIVED
-          );
+          const offer = await this.updateOfferLifecycleStatus({
+            offerId: input.offerId,
+            status: OfferStatus.ARCHIVED,
+            actorUserId: adminUser.id,
+            actorRole: "admin",
+            action: "offer.archived",
+            reason,
+          });
 
           return {
             id: offer.id,
