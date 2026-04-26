@@ -1,6 +1,6 @@
 "use client";
 
-import { type JSX, useState } from "react";
+import { type JSX, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC, useTRPCClient } from "@/utils/trpc";
 
@@ -13,7 +13,9 @@ const statuses = [
   "archived",
 ] as const;
 
-type OfferStatusFilter = "all" | (typeof statuses)[number];
+type OfferStatus = (typeof statuses)[number];
+type OfferStatusFilter = "all" | OfferStatus;
+type OfferAction = "approve" | "publish" | "reject" | "archive";
 
 function formatBenefit(offer: {
   discountType?: string | null;
@@ -42,6 +44,7 @@ function formatBenefit(offer: {
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
+    all: "Все статусы",
     draft: "Черновик",
     pending_review: "На модерации",
     approved: "Одобрено",
@@ -53,6 +56,110 @@ function statusLabel(status: string): string {
   return labels[status] ?? status;
 }
 
+function statusHint(status: string): string {
+  const hints: Record<string, string> = {
+    draft: "Партнёр ещё не отправил скидку на модерацию.",
+    pending_review: "Скидка ожидает решения администратора.",
+    approved: "Скидка одобрена, но ещё не опубликована.",
+    published: "Скидка опубликована и доступна студентам.",
+    rejected: "Скидка отклонена. Партнёр может отправить её повторно.",
+    archived: "Скидка перенесена в архив.",
+  };
+
+  return hints[status] ?? "";
+}
+
+function statusClassName(status: string): string {
+  if (status === "published") {
+    return "rounded-2xl bg-green-50 px-3 py-1 text-xs font-black text-green-700";
+  }
+
+  if (status === "pending_review") {
+    return "rounded-2xl bg-amber-50 px-3 py-1 text-xs font-black text-amber-700";
+  }
+
+  if (status === "approved") {
+    return "rounded-2xl bg-blue-50 px-3 py-1 text-xs font-black text-blue-700";
+  }
+
+  if (status === "rejected" || status === "archived") {
+    return "rounded-2xl bg-red-50 px-3 py-1 text-xs font-black text-red-700";
+  }
+
+  return "rounded-2xl bg-[#F7F6F1] px-3 py-1 text-xs font-black text-[#526470]";
+}
+
+function getVisibleActions(status: OfferStatus): OfferAction[] {
+  if (status === "draft") {
+    return ["archive"];
+  }
+
+  if (status === "pending_review") {
+    return ["approve", "publish", "reject", "archive"];
+  }
+
+  if (status === "approved") {
+    return ["publish", "reject", "archive"];
+  }
+
+  if (status === "published") {
+    return ["archive"];
+  }
+
+  if (status === "rejected") {
+    return ["approve", "archive"];
+  }
+
+  if (status === "archived") {
+    return [];
+  }
+
+  return [];
+}
+
+function actionLabel(action: OfferAction): string {
+  const labels: Record<OfferAction, string> = {
+    approve: "Approve",
+    publish: "Publish",
+    reject: "Reject",
+    archive: "Archive",
+  };
+
+  return labels[action];
+}
+
+function actionClassName(action: OfferAction): string {
+  if (action === "publish") {
+    return "rounded-2xl bg-[#FF9F8A] px-4 py-2 text-sm font-bold text-white disabled:opacity-50";
+  }
+
+  if (action === "approve") {
+    return "rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 disabled:opacity-50";
+  }
+
+  if (action === "reject") {
+    return "rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-50";
+  }
+
+  return "rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-2 text-sm font-bold text-[#526470] disabled:opacity-50";
+}
+
+function reasonPlaceholder(status: string): string {
+  if (status === "pending_review" || status === "approved") {
+    return "Причина отказа или архивации. Например: неверные условия скидки";
+  }
+
+  if (status === "published") {
+    return "Причина архивации. Например: акция завершена";
+  }
+
+  return "Причина действия";
+}
+
+function shouldShowReasonBox(actions: OfferAction[]): boolean {
+  return actions.includes("reject") || actions.includes("archive");
+}
+
 export default function AdminOffersPage(): JSX.Element {
   const trpc = useTRPC();
   const trpcClient = useTRPCClient();
@@ -61,6 +168,9 @@ export default function AdminOffersPage(): JSX.Element {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
+  const [reasonByOfferId, setReasonByOfferId] = useState<
+    Record<string, string>
+  >({});
 
   const offersQuery = useQuery(
     trpc.business.admin.listOffers.queryOptions({
@@ -72,13 +182,36 @@ export default function AdminOffersPage(): JSX.Element {
 
   const offers = offersQuery.data?.items ?? [];
 
+  const metrics = useMemo(() => {
+    return {
+      total: offersQuery.data?.total ?? 0,
+      pending: offers.filter((offer) => offer.status === "pending_review")
+        .length,
+      approved: offers.filter((offer) => offer.status === "approved").length,
+      published: offers.filter((offer) => offer.status === "published").length,
+      rejected: offers.filter((offer) => offer.status === "rejected").length,
+    };
+  }, [offers, offersQuery.data?.total]);
+
+  function getReason(offerId: string): string | undefined {
+    const value = reasonByOfferId[offerId]?.trim();
+
+    if (!value || value.length < 3) {
+      return undefined;
+    }
+
+    return value;
+  }
+
   async function runAction(
     offerId: string,
-    action: "approve" | "publish" | "reject" | "archive"
+    action: OfferAction
   ): Promise<void> {
     setBusyOfferId(offerId);
     setActionMessage(null);
     setActionError(null);
+
+    const reason = getReason(offerId);
 
     try {
       if (action === "approve") {
@@ -92,14 +225,25 @@ export default function AdminOffersPage(): JSX.Element {
       }
 
       if (action === "reject") {
-        await trpcClient.business.admin.rejectOffer.mutate({ offerId });
+        await trpcClient.business.admin.rejectOffer.mutate({
+          offerId,
+          reason,
+        });
         setActionMessage("Скидка отклонена.");
       }
 
       if (action === "archive") {
-        await trpcClient.business.admin.archiveOffer.mutate({ offerId });
+        await trpcClient.business.admin.archiveOffer.mutate({
+          offerId,
+          reason,
+        });
         setActionMessage("Скидка перенесена в архив.");
       }
+
+      setReasonByOfferId((current) => ({
+        ...current,
+        [offerId]: "",
+      }));
 
       await offersQuery.refetch();
     } catch (caughtError) {
@@ -123,10 +267,47 @@ export default function AdminOffersPage(): JSX.Element {
           Модерация скидок
         </h1>
         <p className="mt-3 max-w-3xl text-[#6B7280]">
-          Здесь админ проверяет скидки партнёров. Только статус{" "}
+          Здесь администратор проверяет скидки партнёров. Только статус{" "}
           <span className="font-bold text-[#17384B]">published</span> делает
           скидку видимой в клиентском каталоге.
         </p>
+      </section>
+
+      <section className="mt-6 grid gap-4 md:grid-cols-5">
+        <div className="rounded-[24px] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-sm font-bold text-[#6B7280]">Всего</p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {metrics.total}
+          </p>
+        </div>
+
+        <div className="rounded-[24px] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-sm font-bold text-[#6B7280]">На модерации</p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {metrics.pending}
+          </p>
+        </div>
+
+        <div className="rounded-[24px] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-sm font-bold text-[#6B7280]">Одобрено</p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {metrics.approved}
+          </p>
+        </div>
+
+        <div className="rounded-[24px] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-sm font-bold text-[#6B7280]">Опубликовано</p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {metrics.published}
+          </p>
+        </div>
+
+        <div className="rounded-[24px] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-sm font-bold text-[#6B7280]">Отклонено</p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {metrics.rejected}
+          </p>
+        </div>
       </section>
 
       <section className="mt-6 rounded-[28px] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
@@ -185,6 +366,8 @@ export default function AdminOffersPage(): JSX.Element {
         ) : (
           offers.map((offer) => {
             const isBusy = busyOfferId === offer.id;
+            const actions = getVisibleActions(offer.status as OfferStatus);
+            const reasonValue = reasonByOfferId[offer.id] ?? "";
 
             return (
               <article
@@ -194,7 +377,7 @@ export default function AdminOffersPage(): JSX.Element {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-2xl bg-[#F7F6F1] px-3 py-1 text-xs font-black text-[#526470]">
+                      <span className={statusClassName(offer.status)}>
                         {statusLabel(offer.status)}
                       </span>
                       <span className="rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-black text-[#FF7F6E]">
@@ -210,6 +393,10 @@ export default function AdminOffersPage(): JSX.Element {
                       {offer.shortDescription ?? "Короткое описание не указано."}
                     </p>
 
+                    <p className="mt-2 text-xs font-semibold text-[#9CA3AF]">
+                      {statusHint(offer.status)}
+                    </p>
+
                     <div className="mt-4 grid gap-2 text-sm text-[#6B7280] md:grid-cols-2">
                       <p>
                         <span className="font-bold text-[#17384B]">
@@ -217,16 +404,19 @@ export default function AdminOffersPage(): JSX.Element {
                         </span>{" "}
                         {offer.partner?.brandName ?? "—"}
                       </p>
+
                       <p>
                         <span className="font-bold text-[#17384B]">Slug:</span>{" "}
                         {offer.slug}
                       </p>
+
                       <p>
                         <span className="font-bold text-[#17384B]">
                           Создано:
                         </span>{" "}
                         {new Date(offer.createdAt).toLocaleString()}
                       </p>
+
                       <p>
                         <span className="font-bold text-[#17384B]">
                           Опубликовано:
@@ -235,42 +425,57 @@ export default function AdminOffersPage(): JSX.Element {
                           ? new Date(offer.publishedAt).toLocaleString()
                           : "—"}
                       </p>
+
+                      <p>
+                        <span className="font-bold text-[#17384B]">
+                          Тип выгоды:
+                        </span>{" "}
+                        {offer.benefitType}
+                      </p>
+
+                      <p>
+                        <span className="font-bold text-[#17384B]">
+                          Статус партнёра:
+                        </span>{" "}
+                        {offer.partner?.status ?? "—"}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="grid min-w-[260px] gap-2">
-                    <button
-                      type="button"
-                      onClick={() => runAction(offer.id, "approve")}
-                      disabled={isBusy || offer.status === "approved"}
-                      className="rounded-2xl border border-[#D8E3DE] px-4 py-2 text-sm font-bold text-[#17384B] disabled:opacity-50"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runAction(offer.id, "publish")}
-                      disabled={isBusy || offer.status === "published"}
-                      className="rounded-2xl bg-[#FF9F8A] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-                    >
-                      Publish
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runAction(offer.id, "reject")}
-                      disabled={isBusy || offer.status === "rejected"}
-                      className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runAction(offer.id, "archive")}
-                      disabled={isBusy || offer.status === "archived"}
-                      className="rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-2 text-sm font-bold text-[#526470] disabled:opacity-50"
-                    >
-                      Archive
-                    </button>
+                  <div className="grid min-w-[280px] gap-3">
+                    {shouldShowReasonBox(actions) && (
+                      <textarea
+                        value={reasonValue}
+                        onChange={(event) =>
+                          setReasonByOfferId((current) => ({
+                            ...current,
+                            [offer.id]: event.target.value,
+                          }))
+                        }
+                        placeholder={reasonPlaceholder(offer.status)}
+                        className="min-h-[88px] rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] p-3 text-sm text-[#17384B] outline-none transition focus:border-[#FFB5A4]"
+                      />
+                    )}
+
+                    {actions.length === 0 ? (
+                      <div className="rounded-2xl bg-[#F9FAF8] p-4 text-sm font-semibold text-[#6B7280]">
+                        Доступных действий нет.
+                      </div>
+                    ) : (
+                      <div className="grid gap-2">
+                        {actions.map((action) => (
+                          <button
+                            key={action}
+                            type="button"
+                            onClick={() => runAction(offer.id, action)}
+                            disabled={isBusy}
+                            className={actionClassName(action)}
+                          >
+                            {isBusy ? "Processing..." : actionLabel(action)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </article>
