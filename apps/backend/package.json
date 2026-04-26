@@ -18,6 +18,7 @@
     "test:posthog": "tsx src/scripts/test-posthog.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1037.0",
     "@clerk/express": "^1.4.9",
     "@nestjs/common": "^11.1.0",
     "@nestjs/config": "^4.0.2",
@@ -28,6 +29,7 @@
     "@nestjs/websockets": "^11.1.0",
     "@repo/analytics": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/domain-services": "workspace:*",
     "@repo/services": "workspace:*",
     "@repo/trpc": "workspace:*",
     "@repo/websockets": "workspace:*",
@@ -45,8 +47,7 @@
     "superjson": "^2.2.2",
     "svix": "^1.64.1",
     "typeorm": "^0.3.22",
-    "zod": "^3.24.3",
-    "@repo/domain-services": "workspace:*"
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.7",

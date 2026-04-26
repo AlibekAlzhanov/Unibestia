@@ -10,9 +10,11 @@ import {
   UserRole,
 } from "@repo/db";
 import { StudentVerificationDocumentsController } from "./student-verification-documents.controller.js";
+import { StorageModule } from "../storage/storage.module.js";
 
 @Module({
   imports: [
+    StorageModule,
     TypeOrmModule.forFeature([
       User,
       UserRole,

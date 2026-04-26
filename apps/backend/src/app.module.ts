@@ -14,6 +14,7 @@ import { PostHogModule } from "@repo/analytics";
 import { WebsocketsModule } from "@repo/websockets/server";
 import { HealthModule } from "./health/health.module.js";
 import { StudentVerificationDocumentsModule } from "./student-verifications/student-verification-documents.module.js";
+import { MediaUploadsModule } from "./media/media-uploads.module.js";
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { StudentVerificationDocumentsModule } from "./student-verifications/stud
     WebhooksModule,
     HealthModule,
     StudentVerificationDocumentsModule,
+    MediaUploadsModule,
   ],
   controllers: [TRPCPanelController],
   providers: [],

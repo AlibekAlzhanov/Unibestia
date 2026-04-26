@@ -4,6 +4,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Inject,
   NotFoundException,
   Param,
   Post,
@@ -29,9 +30,8 @@ import {
   UserRole,
 } from "@repo/db";
 import { randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { Repository } from "typeorm";
+import { StorageService } from "../storage/storage.service.js";
 
 type UploadedPdfFile = {
   originalname: string;
@@ -40,15 +40,15 @@ type UploadedPdfFile = {
   buffer: Buffer;
 };
 
+type PdfHttpResponse = {
+  setHeader(name: string, value: string): void;
+  send(body: Buffer): unknown;
+};
+
 type AuthenticatedHttpRequest = {
   headers: {
     authorization?: string | string[];
   };
-};
-
-type PdfHttpResponse = {
-  setHeader(name: string, value: string): void;
-  sendFile(filePath: string): unknown;
 };
 
 @Controller("student-verifications")
@@ -65,7 +65,9 @@ export class StudentVerificationDocumentsController {
     @InjectRepository(StudentVerification)
     private readonly studentVerificationsRepo: Repository<StudentVerification>,
     @InjectRepository(UniversityEmailDomain)
-    private readonly universityEmailDomainsRepo: Repository<UniversityEmailDomain>
+    private readonly universityEmailDomainsRepo: Repository<UniversityEmailDomain>,
+    @Inject(StorageService)
+    private readonly storageService: StorageService
   ) {}
 
   @Post("document")
@@ -117,7 +119,7 @@ export class StudentVerificationDocumentsController {
       method: StudentVerificationMethod.DOCUMENT_PDF,
       status: StudentVerificationRequestStatus.PENDING,
       submittedEmail: user.email,
-      documentUrl: `local://${storageKey}`,
+      documentUrl: `r2://${storageKey}`,
       documentType: "electronic_student_card_pdf",
       reviewComment: null,
       reviewedByUserId: null,
@@ -167,15 +169,16 @@ export class StudentVerificationDocumentsController {
       throw new ForbiddenException("You are not allowed to access this document");
     }
 
-    if (!verification.documentUrl?.startsWith("local://")) {
+    if (!verification.documentUrl?.startsWith("r2://")) {
       throw new NotFoundException("Verification document file is missing");
     }
 
-    const storageKey = verification.documentUrl.replace("local://", "");
-    const absolutePath = this.resolveStorageKey(storageKey);
+    const storageKey = verification.documentUrl.replace("r2://", "");
+
+    let storedObject: Awaited<ReturnType<StorageService["getObject"]>>;
 
     try {
-      await fs.access(absolutePath);
+      storedObject = await this.storageService.getObject(storageKey);
     } catch {
       throw new NotFoundException("Verification document file is missing");
     }
@@ -187,7 +190,11 @@ export class StudentVerificationDocumentsController {
       `inline; filename="student-verification-${verification.id}.pdf"`
     );
 
-    return res.sendFile(absolutePath);
+    if (storedObject.contentLength) {
+      res.setHeader("Content-Length", String(storedObject.contentLength));
+    }
+
+    return res.send(storedObject.body);
   }
 
   private async requireCurrentLocalUser(
@@ -373,41 +380,21 @@ export class StudentVerificationDocumentsController {
     }
   }
 
-  private getUploadRoot(): string {
-    return path.resolve(
-      process.env.STUDENT_VERIFICATION_UPLOAD_DIR ??
-        path.join(process.cwd(), "uploads", "student-verifications")
-    );
-  }
-
-  private resolveStorageKey(storageKey: string): string {
-    const uploadRoot = this.getUploadRoot();
-    const absoluteUploadRoot = path.resolve(uploadRoot);
-    const absolutePath = path.resolve(absoluteUploadRoot, storageKey);
-
-    if (
-      absolutePath !== absoluteUploadRoot &&
-      !absolutePath.startsWith(`${absoluteUploadRoot}${path.sep}`)
-    ) {
-      throw new ForbiddenException("Invalid document path");
-    }
-
-    return absolutePath;
-  }
-
   private async storePdfFile(
     userId: string,
     file: UploadedPdfFile
   ): Promise<string> {
     const safeUserId = userId.replace(/[^a-zA-Z0-9-]/g, "");
     const fileName = `${randomUUID()}.pdf`;
-    const storageKey = path.join(safeUserId, fileName);
-    const absolutePath = this.resolveStorageKey(storageKey);
+    const storageKey = `student-verifications/${safeUserId}/${fileName}`;
 
-    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-    await fs.writeFile(absolutePath, file.buffer, { mode: 0o600 });
+    await this.storageService.uploadObject({
+      key: storageKey,
+      body: file.buffer,
+      contentType: "application/pdf",
+    });
 
-    return storageKey.replace(/\\/g, "/");
+    return storageKey;
   }
 
   private async isAdmin(userId: string): Promise<boolean> {
