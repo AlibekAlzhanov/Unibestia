@@ -184,6 +184,103 @@ export class AdminStudentVerificationsRouter {
     };
   }
 
+  private createVerificationListQuery(input?: {
+    status?: StudentVerificationRequestStatus;
+    limit?: number;
+    offset?: number;
+  }) {
+    const limit = Math.min(Math.max(input?.limit ?? 30, 1), 100);
+    const offset = Math.max(input?.offset ?? 0, 0);
+
+    const query = this.studentVerificationsRepo
+      .createQueryBuilder("verification")
+      .leftJoin("verification.user", "user")
+      .leftJoin("verification.studentProfile", "studentProfile")
+      .leftJoin("studentProfile.university", "university")
+      .leftJoin("verification.reviewedBy", "reviewedBy")
+      .select([
+        "verification.id",
+        "verification.method",
+        "verification.status",
+        "verification.submittedEmail",
+        "verification.documentUrl",
+        "verification.documentType",
+        "verification.reviewComment",
+        "verification.reviewedAt",
+        "verification.expiresAt",
+        "verification.createdAt",
+        "verification.updatedAt",
+
+        "user.id",
+        "user.email",
+        "user.firstName",
+        "user.lastName",
+        "user.displayName",
+        "user.status",
+
+        "studentProfile.id",
+        "studentProfile.verificationStatus",
+        "studentProfile.studentEmail",
+        "studentProfile.degree",
+        "studentProfile.specialty",
+        "studentProfile.course",
+        "studentProfile.admissionDate",
+        "studentProfile.verifiedAt",
+        "studentProfile.verificationExpiresAt",
+
+        "university.id",
+        "university.name",
+        "university.shortName",
+        "university.city",
+        "university.country",
+        "university.status",
+
+        "reviewedBy.id",
+        "reviewedBy.email",
+        "reviewedBy.displayName",
+      ])
+      .orderBy("verification.createdAt", "DESC")
+      .take(limit)
+      .skip(offset);
+
+    if (input?.status) {
+      query.where("verification.status = :status", {
+        status: input.status,
+      });
+    }
+
+    return query;
+  }
+
+  private async getVerificationMetrics(): Promise<{
+    pending: number;
+    approved: number;
+    rejected: number;
+    expired: number;
+  }> {
+    const [pending, approved, rejected, expired] = await Promise.all([
+      this.studentVerificationsRepo.count({
+        where: { status: StudentVerificationRequestStatus.PENDING },
+      }),
+      this.studentVerificationsRepo.count({
+        where: { status: StudentVerificationRequestStatus.APPROVED },
+      }),
+      this.studentVerificationsRepo.count({
+        where: { status: StudentVerificationRequestStatus.REJECTED },
+      }),
+      this.studentVerificationsRepo.count({
+        where: { status: StudentVerificationRequestStatus.EXPIRED },
+      }),
+    ]);
+
+    return {
+      pending,
+      approved,
+      rejected,
+      expired,
+    };
+  }
+
   private async findVerificationOrThrow(verificationId: string) {
     const verification = await this.studentVerificationsRepo.findOne({
       where: { id: verificationId },
@@ -229,52 +326,24 @@ export class AdminStudentVerificationsRouter {
       .query(async ({ ctx, input }) => {
         await this.requireAdminUser(ctx);
 
-        const where = input?.status
-          ? {
-              status: input.status as StudentVerificationRequestStatus,
-            }
-          : {};
+        const status = input?.status
+          ? (input.status as StudentVerificationRequestStatus)
+          : undefined;
 
-        const [items, total] = await this.studentVerificationsRepo.findAndCount({
-          where,
-          relations: {
-            user: true,
-            studentProfile: {
-              university: true,
-            },
-            reviewedBy: true,
-          },
-          order: {
-            createdAt: "DESC",
-          },
-          take: input?.limit ?? 30,
-          skip: input?.offset ?? 0,
-        });
+        const [listResult, metrics] = await Promise.all([
+          this.createVerificationListQuery({
+            status,
+            limit: input?.limit ?? 30,
+            offset: input?.offset ?? 0,
+          }).getManyAndCount(),
+          this.getVerificationMetrics(),
+        ]);
 
-        const [pendingCount, approvedCount, rejectedCount, expiredCount] =
-          await Promise.all([
-            this.studentVerificationsRepo.count({
-              where: { status: StudentVerificationRequestStatus.PENDING },
-            }),
-            this.studentVerificationsRepo.count({
-              where: { status: StudentVerificationRequestStatus.APPROVED },
-            }),
-            this.studentVerificationsRepo.count({
-              where: { status: StudentVerificationRequestStatus.REJECTED },
-            }),
-            this.studentVerificationsRepo.count({
-              where: { status: StudentVerificationRequestStatus.EXPIRED },
-            }),
-          ]);
+        const [items, total] = listResult;
 
         return {
           total,
-          metrics: {
-            pending: pendingCount,
-            approved: approvedCount,
-            rejected: rejectedCount,
-            expired: expiredCount,
-          },
+          metrics,
           items: items.map((item) => this.mapVerification(item)),
         };
       }),
