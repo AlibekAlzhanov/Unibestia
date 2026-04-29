@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+﻿import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { TRPCError } from "@trpc/server";
 import { randomUUID } from "node:crypto";
@@ -330,54 +330,117 @@ export class BusinessRouter {
     return `${this.slugify(title)}-${randomUUID().slice(0, 8)}`;
   }
 
+  private uniqueIds(ids: Array<string | null | undefined>): string[] {
+    return [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  }
+
   private async getOffersMap(offerIds: string[]) {
-    if (offerIds.length === 0) {
+    const uniqueOfferIds = this.uniqueIds(offerIds);
+
+    if (uniqueOfferIds.length === 0) {
       return new Map<string, Offer>();
     }
 
     const offers = await this.offersRepo.find({
-      where: { id: In(offerIds) },
+      where: { id: In(uniqueOfferIds) },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+      },
     });
 
     return new Map(offers.map((offer) => [offer.id, offer]));
   }
 
   private async getUsersMap(userIds: string[]) {
-    if (userIds.length === 0) {
+    const uniqueUserIds = this.uniqueIds(userIds);
+
+    if (uniqueUserIds.length === 0) {
       return new Map<string, User>();
     }
 
     const users = await this.usersRepo.find({
-      where: { id: In(userIds) },
+      where: { id: In(uniqueUserIds) },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        firstName: true,
+        lastName: true,
+      },
     });
 
     return new Map(users.map((user) => [user.id, user]));
   }
 
   private async getLocationsMap(locationIds: string[]) {
-    if (locationIds.length === 0) {
+    const uniqueLocationIds = this.uniqueIds(locationIds);
+
+    if (uniqueLocationIds.length === 0) {
       return new Map<string, PartnerLocation>();
     }
 
     const locations = await this.partnerLocationsRepo.find({
-      where: { id: In(locationIds) },
+      where: { id: In(uniqueLocationIds) },
+      select: {
+        id: true,
+        name: true,
+        city: true,
+        address: true,
+      },
     });
 
     return new Map(locations.map((location) => [location.id, location]));
   }
 
   private async getPartnersMap(partnerIds: string[]) {
-    if (partnerIds.length === 0) {
+    const uniquePartnerIds = this.uniqueIds(partnerIds);
+
+    if (uniquePartnerIds.length === 0) {
       return new Map<string, Partner>();
     }
 
     const partners = await this.partnersRepo.find({
-      where: { id: In(partnerIds) },
+      where: { id: In(uniquePartnerIds) },
+      select: {
+        id: true,
+        brandName: true,
+        legalName: true,
+        status: true,
+        logoUrl: true,
+        contactEmail: true,
+      },
     });
 
     return new Map(partners.map((partner) => [partner.id, partner]));
   }
 
+  private async getPartnerRedemptionAmountTotals(partnerId: string): Promise<{
+    totalOrderAmount: number;
+    totalDiscountAmount: number;
+  }> {
+    const result = await this.redemptionsRepo
+      .createQueryBuilder("redemption")
+      .select("COALESCE(SUM(redemption.orderAmount), 0)", "totalOrderAmount")
+      .addSelect(
+        "COALESCE(SUM(redemption.discountAmount), 0)",
+        "totalDiscountAmount"
+      )
+      .where("redemption.partnerId = :partnerId", { partnerId })
+      .andWhere("redemption.status = :status", {
+        status: RedemptionStatus.USED,
+      })
+      .getRawOne<{
+        totalOrderAmount: string | null;
+        totalDiscountAmount: string | null;
+      }>();
+
+    return {
+      totalOrderAmount: Number(result?.totalOrderAmount ?? 0),
+      totalDiscountAmount: Number(result?.totalDiscountAmount ?? 0),
+    };
+  }
   private async updateOfferLifecycleStatus(input: {
     offerId: string;
     status: OfferStatus;
@@ -480,6 +543,7 @@ export class BusinessRouter {
       usedRedemptions,
       activeLocations,
       recentRedemptions,
+      amountTotals,
     ] = await Promise.all([
       this.offersRepo.count({ where: { partnerId: partner.id } }),
       this.offersRepo.count({
@@ -497,40 +561,33 @@ export class BusinessRouter {
       }),
       this.redemptionsRepo.find({
         where: { partnerId: partner.id },
+        select: {
+          id: true,
+          status: true,
+          qrToken: true,
+          orderAmount: true,
+          discountAmount: true,
+          createdAt: true,
+          usedAt: true,
+          offerId: true,
+          userId: true,
+          locationId: true,
+        },
         order: { createdAt: "DESC" },
         take: 6,
       }),
+      this.getPartnerRedemptionAmountTotals(partner.id),
     ]);
 
-    const usedRows = await this.redemptionsRepo.find({
-      where: { partnerId: partner.id, status: RedemptionStatus.USED },
-      select: {
-        id: true,
-        orderAmount: true,
-        discountAmount: true,
-      },
-    });
-
-    const totalOrderAmount = usedRows.reduce(
-      (sum, item) => sum + Number(item.orderAmount ?? 0),
-      0
-    );
-    const totalDiscountAmount = usedRows.reduce(
-      (sum, item) => sum + Number(item.discountAmount ?? 0),
-      0
-    );
-
-    const offersMap = await this.getOffersMap(
-      recentRedemptions.map((item) => item.offerId)
-    );
-    const usersMap = await this.getUsersMap(
-      recentRedemptions.map((item) => item.userId)
-    );
-    const locationsMap = await this.getLocationsMap(
+    const [offersMap, usersMap, locationsMap] = await Promise.all([
+      this.getOffersMap(recentRedemptions.map((item) => item.offerId)),
+      this.getUsersMap(recentRedemptions.map((item) => item.userId)),
+      this.getLocationsMap(
       recentRedemptions
         .map((item) => item.locationId)
-        .filter((value): value is string => Boolean(value))
-    );
+        .filter((locationId): locationId is string => Boolean(locationId))
+      ),
+    ]);
 
     return {
       partner: {
@@ -548,8 +605,8 @@ export class BusinessRouter {
         totalRedemptions,
         usedRedemptions,
         activeLocations,
-        totalDiscountAmount,
-        totalOrderAmount,
+        totalDiscountAmount: amountTotals.totalDiscountAmount,
+        totalOrderAmount: amountTotals.totalOrderAmount,
       },
       recentRedemptions: recentRedemptions.map((item) => {
         const offer = offersMap.get(item.offerId) ?? null;
