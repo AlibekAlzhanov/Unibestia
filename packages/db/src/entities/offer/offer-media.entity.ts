@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from "typeorm";
 import { Offer } from "./offer.entity.js";
 
@@ -13,6 +14,13 @@ export enum OfferMediaType {
   BANNER = "banner",
 }
 
+@Index("idx_offer_media_offer_id", ["offerId"])
+@Index("idx_offer_media_offer_cover_sort", [
+  "offerId",
+  "isCover",
+  "sortOrder",
+  "createdAt",
+])
 @Entity("offer_media")
 export class OfferMedia {
   @PrimaryGeneratedColumn("uuid")

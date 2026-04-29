@@ -21,6 +21,7 @@ export enum ReviewStatus {
   REJECTED = "rejected",
 }
 
+@Index("idx_reviews_offer_status_created", ["offerId", "status", "createdAt"])
 @Entity("reviews")
 @Check(`"rating" >= 1 AND "rating" <= 5`)
 export class Review {
@@ -74,7 +75,9 @@ export class Review {
   @JoinColumn({ name: "offer_id" })
   offer: Offer;
 
-  @OneToOne(() => Redemption, (redemption) => redemption.review, { onDelete: "CASCADE" })
+  @OneToOne(() => Redemption, (redemption) => redemption.review, {
+    onDelete: "CASCADE",
+  })
   @JoinColumn({ name: "redemption_id" })
   redemption: Redemption;
 
