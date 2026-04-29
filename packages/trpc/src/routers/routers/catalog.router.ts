@@ -23,6 +23,35 @@ export class CatalogRouter {
       return this.catalogService.listCategories();
     }),
 
+    getHomeOffers: procedure.query(async () => {
+      try {
+        const [featuredOffers, newOffers] = await Promise.all([
+          this.catalogService.listOffers({
+            featuredOnly: true,
+            limit: 6,
+            offset: 0,
+          }),
+          this.catalogService.listOffers({
+            limit: 6,
+            offset: 0,
+          }),
+        ]);
+
+        return {
+          featuredOffers: featuredOffers.items,
+          newOffers: newOffers.items,
+        };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to load home offers",
+        });
+      }
+    }),
+
     listOffers: procedure
       .input(listOffersInputSchema)
       .query(async ({ input }) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { type JSX } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink, type TRPCClient } from "@trpc/client";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -13,48 +13,42 @@ function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 50 * 1000, // 5 seconds
-        gcTime: 10 * 60 * 1000, // 10 minutes
+        staleTime: 60 * 1000,
+        gcTime: 10 * 60 * 1000,
         retry: 1,
         refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
       },
     },
   });
 }
 
-let browserQueryClient: QueryClient | undefined;
-
-function getQueryClient(): QueryClient {
-  if (typeof window === "undefined") {
-    return makeQueryClient();
-  }
-
-  if (!browserQueryClient) browserQueryClient = makeQueryClient();
-  return browserQueryClient;
-}
-
-interface TRPCProviderProps {
-  children: React.ReactNode;
-}
-
-export function AppTRPCProvider({ children }: TRPCProviderProps): JSX.Element {
+export function AppTRPCProvider({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
   const { getToken } = useAuth();
-  const queryClient = getQueryClient();
 
-  const trpcClient = createTRPCClient({
-    links: [
-      httpBatchLink({
-        url: env.NEXT_PUBLIC_TRPC_URL,
-        transformer: superjson,
-        async headers() {
-          const token = await getToken();
-          return {
-            authorization: token ? `Bearer ${token}` : "",
-          };
-        },
-      }),
-    ],
-  });
+  const [queryClient] = useState(() => makeQueryClient());
+
+  const [trpcClient] = useState(() =>
+    createTRPCClient<AppRouter>({
+      links: [
+        httpBatchLink({
+          url: env.NEXT_PUBLIC_TRPC_URL,
+          transformer: superjson,
+          async headers() {
+            const token = await getToken();
+
+            return {
+              authorization: token ? `Bearer ${token}` : "",
+            };
+          },
+        }),
+      ],
+    })
+  );
 
   return (
     <QueryClientProvider client={queryClient}>

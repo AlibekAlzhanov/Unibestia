@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type JSX, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 type OfferCard = {
   id: string;
@@ -121,18 +122,28 @@ export default function CatalogPage(): JSX.Element {
   >();
   const [search, setSearch] = useState("");
 
-  const categoriesQuery = useQuery(trpc.catalog.listCategories.queryOptions());
+  const debouncedSearch = useDebouncedValue(search, 400);
 
-  const normalizedSearch = useMemo(() => search.trim(), [search]);
+  const normalizedSearch = useMemo(
+    () => debouncedSearch.trim(),
+    [debouncedSearch]
+  );
 
-  const offersQuery = useQuery(
-    trpc.catalog.listOffers.queryOptions({
+  const categoriesQuery = useQuery({
+    ...trpc.catalog.listCategories.queryOptions(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const offersQuery = useQuery({
+    ...trpc.catalog.listOffers.queryOptions({
       categorySlug: selectedCategorySlug,
       search: normalizedSearch.length > 0 ? normalizedSearch : undefined,
       limit: 24,
       offset: 0,
-    })
-  );
+    }),
+    staleTime: 60 * 1000,
+    placeholderData: (previousData) => previousData,
+  });
 
   const categories = categoriesQuery.data ?? [];
   const offers = offersQuery.data?.items ?? [];

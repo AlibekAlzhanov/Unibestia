@@ -126,13 +126,18 @@ export default function OfferDetailsPage(): JSX.Element {
     string | undefined
   >();
 
-  const offerQuery = useQuery(
-    trpc.catalog.getOfferBySlug.queryOptions({
+  const offerQuery = useQuery({
+    ...trpc.catalog.getOfferBySlug.queryOptions({
       slug: params.slug,
-    })
-  );
+    }),
+    staleTime: 60 * 1000,
+  });
 
-  const profileQuery = useQuery(trpc.profile.getMyProfile.queryOptions());
+  const profileQuery = useQuery({
+    ...trpc.profile.getMyProfile.queryOptions(),
+    enabled: Boolean(offerQuery.data),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const offer = offerQuery.data as OfferDetails | undefined;
   const isAllowedStudentEmail =

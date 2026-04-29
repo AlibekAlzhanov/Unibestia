@@ -108,6 +108,7 @@ function OfferCardView({ offer }: { offer: OfferCard }): JSX.Element {
             </h3>
           </div>
         </div>
+
         <span className="shrink-0 rounded-2xl bg-[#FFF0EB] px-3 py-2 text-sm font-extrabold text-[#FF7F6E]">
           {formatBenefit(offer)}
         </span>
@@ -132,23 +133,13 @@ function OfferCardView({ offer }: { offer: OfferCard }): JSX.Element {
 export default function HomePage(): JSX.Element {
   const trpc = useTRPC();
 
-  const featuredOffersQuery = useQuery(
-    trpc.catalog.listOffers.queryOptions({
-      featuredOnly: true,
-      limit: 6,
-      offset: 0,
-    })
-  );
+  const homeOffersQuery = useQuery({
+    ...trpc.catalog.getHomeOffers.queryOptions(),
+    staleTime: 60 * 1000,
+  });
 
-  const newOffersQuery = useQuery(
-    trpc.catalog.listOffers.queryOptions({
-      limit: 6,
-      offset: 0,
-    })
-  );
-
-  const featuredOffers = featuredOffersQuery.data?.items ?? [];
-  const newOffers = newOffersQuery.data?.items ?? [];
+  const featuredOffers = homeOffersQuery.data?.featuredOffers ?? [];
+  const newOffers = homeOffersQuery.data?.newOffers ?? [];
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] flex-col gap-8 px-4 py-8 md:px-6 lg:px-8">
@@ -196,13 +187,13 @@ export default function HomePage(): JSX.Element {
           </Link>
         </div>
 
-        {featuredOffersQuery.isLoading ? (
+        {homeOffersQuery.isLoading ? (
           <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
             Загружаем предложения...
           </div>
-        ) : featuredOffersQuery.error ? (
+        ) : homeOffersQuery.error ? (
           <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
-            Не удалось загрузить рекомендации: {featuredOffersQuery.error.message}
+            Не удалось загрузить рекомендации: {homeOffersQuery.error.message}
           </div>
         ) : featuredOffers.length === 0 ? (
           <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
@@ -227,13 +218,14 @@ export default function HomePage(): JSX.Element {
           </h2>
         </div>
 
-        {newOffersQuery.isLoading ? (
+        {homeOffersQuery.isLoading ? (
           <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
             Загружаем новые скидки...
           </div>
-        ) : newOffersQuery.error ? (
+        ) : homeOffersQuery.error ? (
           <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
-            Не удалось загрузить новые предложения: {newOffersQuery.error.message}
+            Не удалось загрузить новые предложения:{" "}
+            {homeOffersQuery.error.message}
           </div>
         ) : newOffers.length === 0 ? (
           <div className="rounded-3xl bg-white p-6 text-[#6B7280]">
