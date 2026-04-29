@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { type JSX, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -57,11 +58,15 @@ function CatalogOfferCard({ offer }: { offer: OfferCard }): JSX.Element {
       className="group overflow-hidden rounded-[28px] border border-[#E5ECE9] bg-white shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4]"
     >
       {offer.coverMedia?.fileUrl ? (
-        <img
-          src={offer.coverMedia.fileUrl}
-          alt={offer.title}
-          className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-        />
+        <div className="relative h-44 w-full overflow-hidden">
+          <Image
+            src={offer.coverMedia.fileUrl}
+            alt={offer.title}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+            className="object-cover transition duration-300 group-hover:scale-[1.03]"
+          />
+        </div>
       ) : (
         <div className="flex h-44 items-center justify-center bg-gradient-to-br from-[#17384B] to-[#FF9F8A] text-sm font-black uppercase tracking-[0.22em] text-white">
           UniBestia
@@ -72,9 +77,12 @@ function CatalogOfferCard({ offer }: { offer: OfferCard }): JSX.Element {
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="flex min-w-0 gap-3">
             {offer.partner?.logoUrl ? (
-              <img
+              <Image
                 src={offer.partner.logoUrl}
                 alt={offer.partner.brandName ?? "Партнёр"}
+                width={40}
+                height={40}
+                sizes="40px"
                 className="h-10 w-10 shrink-0 rounded-2xl border border-[#E5ECE9] object-cover"
               />
             ) : (

@@ -1,7 +1,6 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignedIn, SignedOut, useAuth, useClerk } from "@clerk/nextjs";
@@ -182,9 +181,12 @@ export function Navbar(): JSX.Element {
                 aria-haspopup="menu"
               >
                 {avatarUrl ? (
-                  <img
+                  <Image
                     src={avatarUrl}
                     alt="Аватарка пользователя"
+                    width={36}
+                    height={36}
+                    sizes="36px"
                     className="h-9 w-9 rounded-full object-cover"
                   />
                 ) : (
@@ -210,9 +212,12 @@ export function Navbar(): JSX.Element {
                   <div className="border-b border-[#E5ECE9] bg-[#F9FAF8] p-4">
                     <div className="flex items-center gap-3">
                       {avatarUrl ? (
-                        <img
+                        <Image
                           src={avatarUrl}
                           alt="Аватарка пользователя"
+                          width={48}
+                          height={48}
+                          sizes="48px"
                           className="h-12 w-12 rounded-full object-cover"
                         />
                       ) : (

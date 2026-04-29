@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -53,11 +54,13 @@ function formatBenefit(offer: OfferCard): string {
 function OfferCover({ offer }: { offer: OfferCard }): JSX.Element {
   if (offer.coverMedia?.fileUrl) {
     return (
-      <div className="mb-4 overflow-hidden rounded-[22px] bg-[#F7F6F1]">
-        <img
+      <div className="relative mb-4 h-44 overflow-hidden rounded-[22px] bg-[#F7F6F1]">
+        <Image
           src={offer.coverMedia.fileUrl}
           alt={offer.title}
-          className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+          className="object-cover transition duration-300 group-hover:scale-[1.03]"
         />
       </div>
     );
@@ -73,9 +76,12 @@ function OfferCover({ offer }: { offer: OfferCard }): JSX.Element {
 function PartnerLogo({ offer }: { offer: OfferCard }): JSX.Element {
   if (offer.partner?.logoUrl) {
     return (
-      <img
+      <Image
         src={offer.partner.logoUrl}
         alt={offer.partner.brandName ?? "Партнёр"}
+        width={40}
+        height={40}
+        sizes="40px"
         className="h-10 w-10 rounded-2xl border border-[#E5ECE9] object-cover"
       />
     );

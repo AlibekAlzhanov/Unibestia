@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type JSX, useEffect, useMemo, useState } from "react";
@@ -238,11 +239,16 @@ export default function OfferDetailsPage(): JSX.Element {
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
         <section className="overflow-hidden rounded-[32px] bg-white shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
           {coverMedia?.fileUrl ? (
-            <img
-              src={coverMedia.fileUrl}
-              alt={offer.title}
-              className="h-72 w-full object-cover md:h-96"
-            />
+            <div className="relative h-72 w-full md:h-96">
+              <Image
+                src={coverMedia.fileUrl}
+                alt={offer.title}
+                fill
+                priority
+                sizes="(max-width: 1024px) 100vw, 720px"
+                className="object-cover"
+              />
+            </div>
           ) : (
             <div className="flex h-72 items-center justify-center bg-gradient-to-br from-[#17384B] to-[#FF9F8A] text-center text-sm font-black uppercase tracking-[0.24em] text-white md:h-96">
               UniBestia Offer
@@ -259,9 +265,12 @@ export default function OfferDetailsPage(): JSX.Element {
               {offer.partner && (
                 <span className="inline-flex items-center gap-2 rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-bold text-[#FF7F6E]">
                   {offer.partner.logoUrl && (
-                    <img
+                    <Image
                       src={offer.partner.logoUrl}
                       alt={offer.partner.brandName}
+                      width={20}
+                      height={20}
+                      sizes="20px"
                       className="h-5 w-5 rounded-full object-cover"
                     />
                   )}
@@ -300,12 +309,18 @@ export default function OfferDetailsPage(): JSX.Element {
                 <h2 className="text-xl font-bold text-[#17384B]">Фото</h2>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {galleryMedia.map((item) => (
-                    <img
+                    <div
                       key={item.id}
-                      src={item.fileUrl}
-                      alt={offer.title}
-                      className="h-44 w-full rounded-[24px] object-cover"
-                    />
+                      className="relative h-44 w-full overflow-hidden rounded-[24px]"
+                    >
+                      <Image
+                        src={item.fileUrl}
+                        alt={offer.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                        className="object-cover"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
@@ -334,9 +349,12 @@ export default function OfferDetailsPage(): JSX.Element {
             <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
               <div className="flex items-center gap-4">
                 {offer.partner.logoUrl ? (
-                  <img
+                  <Image
                     src={offer.partner.logoUrl}
                     alt={offer.partner.brandName}
+                    width={64}
+                    height={64}
+                    sizes="64px"
                     className="h-16 w-16 rounded-3xl border border-[#E5ECE9] object-cover"
                   />
                 ) : (
