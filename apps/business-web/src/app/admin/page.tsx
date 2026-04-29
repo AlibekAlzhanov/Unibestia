@@ -75,7 +75,14 @@ const sections = [
 
 export default function AdminPortalPage(): JSX.Element {
   const trpc = useTRPC();
-  const adminQuery = useQuery(trpc.business.admin.getDashboard.queryOptions());
+
+  const adminQuery = useQuery({
+    ...trpc.business.admin.getDashboard.queryOptions(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+
   const adminData = adminQuery.data as AdminDashboardData | undefined;
 
   const metrics = [
@@ -104,16 +111,26 @@ export default function AdminPortalPage(): JSX.Element {
   return (
     <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1280px] px-4 py-10 md:px-6 lg:px-8">
       <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
-          Admin Dashboard
-        </p>
-        <h1 className="mt-2 text-3xl font-black text-[#17384B]">
-          Администрирование UniBestia
-        </h1>
-        <p className="mt-3 max-w-3xl text-[#6B7280]">
-          Центральный раздел управления всей системой. Счётчики уже подключены
-          к PostgreSQL через backend+tRPC.
-        </p>
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
+              Admin Dashboard
+            </p>
+            <h1 className="mt-2 text-3xl font-black text-[#17384B]">
+              Администрирование UniBestia
+            </h1>
+            <p className="mt-3 max-w-3xl text-[#6B7280]">
+              Центральный раздел управления всей системой. Счётчики уже
+              подключены к PostgreSQL через backend+tRPC.
+            </p>
+          </div>
+
+          {adminQuery.isFetching && adminData && (
+            <span className="rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] px-4 py-2 text-xs font-black text-[#526470]">
+              Обновляем данные...
+            </span>
+          )}
+        </div>
       </section>
 
       {adminQuery.error && (
@@ -122,78 +139,102 @@ export default function AdminPortalPage(): JSX.Element {
         </div>
       )}
 
-      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <div
-            key={metric.label}
-            className="rounded-[28px] bg-[#17384B] p-5 text-white shadow-[0_16px_32px_rgba(15,23,42,0.08)]"
-          >
-            <p className="text-sm font-semibold text-[#DDE8EA]">
-              {metric.label}
-            </p>
-            <p className="mt-2 text-4xl font-black">{metric.value}</p>
-            <p className="mt-2 text-sm text-[#FFB5A4]">{metric.hint}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {sections.map((section) => (
-          <Link
-            key={section.href}
-            href={section.href}
-            className="rounded-[28px] border border-[#E5ECE9] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4]"
-          >
-            <h2 className="text-xl font-bold text-[#17384B]">
-              {section.title}
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-              {section.description}
-            </p>
-            <span className="mt-5 inline-flex text-sm font-black text-[#FF7F6E]">
-              Открыть →
-            </span>
-          </Link>
-        ))}
-      </section>
-
-      <section className="mt-6 grid gap-4 md:grid-cols-2">
-        <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-          <h2 className="text-xl font-bold text-[#17384B]">
-            Последние партнёры
-          </h2>
-          <div className="mt-4 space-y-3">
-            {(adminData?.recentPartners ?? []).map((partner) => (
+      {adminQuery.isLoading && !adminData ? (
+        <div className="mt-6 rounded-3xl bg-white p-6 text-[#6B7280]">
+          Загружаем админ-панель...
+        </div>
+      ) : (
+        <>
+          <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {metrics.map((metric) => (
               <div
-                key={partner.id}
-                className="rounded-2xl border border-[#E5ECE9] p-4"
+                key={metric.label}
+                className="rounded-[28px] bg-[#17384B] p-5 text-white shadow-[0_16px_32px_rgba(15,23,42,0.08)]"
               >
-                <p className="font-bold text-[#17384B]">{partner.brandName}</p>
-                <p className="mt-1 text-sm text-[#6B7280]">
-                  {partner.legalName} · {partner.status}
+                <p className="text-sm font-semibold text-[#DDE8EA]">
+                  {metric.label}
                 </p>
+                <p className="mt-2 text-4xl font-black">{metric.value}</p>
+                <p className="mt-2 text-sm text-[#FFB5A4]">{metric.hint}</p>
               </div>
             ))}
-          </div>
-        </div>
+          </section>
 
-        <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-          <h2 className="text-xl font-bold text-[#17384B]">Последние офферы</h2>
-          <div className="mt-4 space-y-3">
-            {(adminData?.recentOffers ?? []).map((offer) => (
-              <div
-                key={offer.id}
-                className="rounded-2xl border border-[#E5ECE9] p-4"
+          <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {sections.map((section) => (
+              <Link
+                key={section.href}
+                href={section.href}
+                className="rounded-[28px] border border-[#E5ECE9] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4]"
               >
-                <p className="font-bold text-[#17384B]">{offer.title}</p>
-                <p className="mt-1 text-sm text-[#6B7280]">
-                  {offer.slug} · {offer.status}
+                <h2 className="text-xl font-bold text-[#17384B]">
+                  {section.title}
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-[#6B7280]">
+                  {section.description}
                 </p>
-              </div>
+                <span className="mt-5 inline-flex text-sm font-black text-[#FF7F6E]">
+                  Открыть →
+                </span>
+              </Link>
             ))}
-          </div>
-        </div>
-      </section>
+          </section>
+
+          <section className="mt-6 grid gap-4 md:grid-cols-2">
+            <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+              <h2 className="text-xl font-bold text-[#17384B]">
+                Последние партнёры
+              </h2>
+              <div className="mt-4 space-y-3">
+                {(adminData?.recentPartners ?? []).length === 0 ? (
+                  <p className="text-sm text-[#6B7280]">
+                    Последних партнёров пока нет.
+                  </p>
+                ) : (
+                  (adminData?.recentPartners ?? []).map((partner) => (
+                    <div
+                      key={partner.id}
+                      className="rounded-2xl border border-[#E5ECE9] p-4"
+                    >
+                      <p className="font-bold text-[#17384B]">
+                        {partner.brandName}
+                      </p>
+                      <p className="mt-1 text-sm text-[#6B7280]">
+                        {partner.legalName} · {partner.status}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+              <h2 className="text-xl font-bold text-[#17384B]">
+                Последние офферы
+              </h2>
+              <div className="mt-4 space-y-3">
+                {(adminData?.recentOffers ?? []).length === 0 ? (
+                  <p className="text-sm text-[#6B7280]">
+                    Последних офферов пока нет.
+                  </p>
+                ) : (
+                  (adminData?.recentOffers ?? []).map((offer) => (
+                    <div
+                      key={offer.id}
+                      className="rounded-2xl border border-[#E5ECE9] p-4"
+                    >
+                      <p className="font-bold text-[#17384B]">{offer.title}</p>
+                      <p className="mt-1 text-sm text-[#6B7280]">
+                        {offer.slug} · {offer.status}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

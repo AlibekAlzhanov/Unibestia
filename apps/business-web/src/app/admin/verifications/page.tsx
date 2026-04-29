@@ -90,6 +90,8 @@ type VerificationAnalysis = {
   }>;
 };
 
+const PAGE_SIZE = 20;
+
 function getBackendApiUrl(): string {
   const rawUrl =
     process.env.NEXT_PUBLIC_API_URL ??
@@ -192,6 +194,7 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
   const { getToken } = useAuth();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
+  const [pageIndex, setPageIndex] = useState(0);
   const [activeRejectId, setActiveRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -204,19 +207,44 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
     Record<string, VerificationAnalysis>
   >({});
 
-  const listQuery = useQuery(
-    trpc.adminStudentVerifications.list.queryOptions({
+  const listQuery = useQuery({
+    ...trpc.adminStudentVerifications.list.queryOptions({
       status: statusFilter === "all" ? undefined : statusFilter,
-      limit: 50,
-      offset: 0,
-    })
-  );
+      limit: PAGE_SIZE,
+      offset: pageIndex * PAGE_SIZE,
+    }),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
 
   const verificationList = listQuery.data as VerificationList | undefined;
   const items = useMemo(
     () => verificationList?.items ?? [],
     [verificationList?.items]
   );
+
+  const metrics = verificationList?.metrics ?? {
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    expired: 0,
+  };
+
+  const total = verificationList?.total ?? 0;
+  const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
+  const currentPage = pageIndex + 1;
+  const canGoPrev = pageIndex > 0;
+  const canGoNext = currentPage < totalPages;
+
+  function changeStatusFilter(nextStatus: StatusFilter): void {
+    setStatusFilter(nextStatus);
+    setPageIndex(0);
+    setActiveRejectId(null);
+    setRejectReason("");
+    setActionError(null);
+    setActionMessage(null);
+  }
 
   async function approveVerification(verificationId: string): Promise<void> {
     setIsActionLoading(true);
@@ -351,33 +379,36 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
     }
   }
 
-  const metrics = verificationList?.metrics ?? {
-    pending: 0,
-    approved: 0,
-    rejected: 0,
-    expired: 0,
-  };
-
   return (
     <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1280px] px-4 py-10 md:px-6 lg:px-8">
       <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
-          Admin Verification
-        </p>
-        <h1 className="mt-2 text-3xl font-black text-[#17384B]">
-          Проверка студентов
-        </h1>
-        <p className="mt-3 max-w-3xl text-[#6B7280]">
-          Проверяйте PDF электронного студенческого, подтверждайте или
-          отклоняйте заявки. После approve студент получает verified-статус на
-          1 год.
-        </p>
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
+              Admin Verification
+            </p>
+            <h1 className="mt-2 text-3xl font-black text-[#17384B]">
+              Проверка студентов
+            </h1>
+            <p className="mt-3 max-w-3xl text-[#6B7280]">
+              Проверяйте PDF электронного студенческого, подтверждайте или
+              отклоняйте заявки. После approve студент получает verified-статус
+              на 1 год.
+            </p>
+          </div>
+
+          {listQuery.isFetching && verificationList && (
+            <span className="rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] px-4 py-2 text-xs font-black text-[#526470]">
+              Обновляем список...
+            </span>
+          )}
+        </div>
       </section>
 
       <section className="mt-6 grid gap-4 md:grid-cols-4">
         <button
           type="button"
-          onClick={() => setStatusFilter("pending")}
+          onClick={() => changeStatusFilter("pending")}
           className={`rounded-[24px] border p-5 text-left ${
             statusFilter === "pending"
               ? "border-[#FF9F8A] bg-[#FFF7F4]"
@@ -392,7 +423,7 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
 
         <button
           type="button"
-          onClick={() => setStatusFilter("approved")}
+          onClick={() => changeStatusFilter("approved")}
           className={`rounded-[24px] border p-5 text-left ${
             statusFilter === "approved"
               ? "border-green-300 bg-green-50"
@@ -407,7 +438,7 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
 
         <button
           type="button"
-          onClick={() => setStatusFilter("rejected")}
+          onClick={() => changeStatusFilter("rejected")}
           className={`rounded-[24px] border p-5 text-left ${
             statusFilter === "rejected"
               ? "border-red-300 bg-red-50"
@@ -422,7 +453,7 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
 
         <button
           type="button"
-          onClick={() => setStatusFilter("all")}
+          onClick={() => changeStatusFilter("all")}
           className={`rounded-[24px] border p-5 text-left ${
             statusFilter === "all"
               ? "border-[#17384B] bg-[#F6F8F7]"
@@ -430,9 +461,7 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
           }`}
         >
           <p className="text-sm font-bold text-[#6B7280]">Все заявки</p>
-          <p className="mt-2 text-3xl font-black text-[#17384B]">
-            {verificationList?.total ?? 0}
-          </p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">{total}</p>
         </button>
       </section>
 
@@ -455,7 +484,7 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
       )}
 
       <section className="mt-6 grid gap-4">
-        {listQuery.isLoading ? (
+        {listQuery.isLoading && !verificationList ? (
           <div className="rounded-[28px] bg-white p-6 text-[#6B7280]">
             Загружаем заявки...
           </div>
@@ -765,6 +794,35 @@ export default function AdminStudentVerificationsPage(): JSX.Element {
             );
           })
         )}
+      </section>
+
+      <section className="mt-6 flex flex-col items-center justify-between gap-3 rounded-[28px] bg-white p-5 shadow-[0_16px_32px_rgba(15,23,42,0.05)] md:flex-row">
+        <p className="text-sm font-bold text-[#526470]">
+          Страница {currentPage} из {totalPages} · Всего заявок: {total}
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPageIndex((current) => Math.max(current - 1, 0))}
+            disabled={!canGoPrev || listQuery.isFetching}
+            className="rounded-2xl border border-[#D8E3DE] bg-white px-5 py-3 text-sm font-bold text-[#17384B] disabled:opacity-50"
+          >
+            ← Назад
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setPageIndex((current) =>
+                current + 1 < totalPages ? current + 1 : current
+              )
+            }
+            disabled={!canGoNext || listQuery.isFetching}
+            className="rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+          >
+            Далее →
+          </button>
+        </div>
       </section>
     </div>
   );

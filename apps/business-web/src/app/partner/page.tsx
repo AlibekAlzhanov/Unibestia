@@ -1,4 +1,5 @@
 "use client";
+
 import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { type JSX } from "react";
@@ -45,10 +46,20 @@ const manageSections = [
 export default function PartnerDashboardPage(): JSX.Element {
   const trpc = useTRPC();
   const { getToken } = useAuth();
-  const dashboardQuery = useQuery(
-    trpc.business.partner.getDashboard.queryOptions()
-  );
-  const meQuery = useQuery(trpc.business.auth.getMe.queryOptions());
+
+  const dashboardQuery = useQuery({
+    ...trpc.business.partner.getDashboard.queryOptions(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+
+  const meQuery = useQuery({
+    ...trpc.business.auth.getMe.queryOptions(),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
 
   const data = dashboardQuery.data;
   const role = meQuery.data?.membership?.role;
@@ -83,25 +94,36 @@ export default function PartnerDashboardPage(): JSX.Element {
   return (
     <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1280px] px-4 py-10 md:px-6 lg:px-8">
       <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
+              Partner Dashboard
+            </p>
+            <h1 className="mt-2 text-3xl font-black text-[#17384B]">
+              {data?.partner?.brandName ?? "Кабинет партнёра"}
+            </h1>
+            <p className="mt-3 max-w-3xl text-[#6B7280]">
+              Реальные данные берутся из PostgreSQL через tRPC: скидки, QR
+              использования, суммы и точки продаж.
+            </p>
 
-        {canManage && (
-          <PartnerLogoUploadCard
-            logoUrl={data?.partner?.logoUrl}
-            getToken={getToken}
-            onUploaded={() => dashboardQuery.refetch()}
-          />
-        )}
+            {dashboardQuery.isFetching && data && (
+              <span className="mt-4 inline-flex rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] px-4 py-2 text-xs font-black text-[#526470]">
+                Обновляем данные...
+              </span>
+            )}
+          </div>
 
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
-          Partner Dashboard
-        </p>
-        <h1 className="mt-2 text-3xl font-black text-[#17384B]">
-          {data?.partner?.brandName ?? "Кабинет партнёра"}
-        </h1>
-        <p className="mt-3 max-w-3xl text-[#6B7280]">
-          Реальные данные берутся из PostgreSQL через tRPC: скидки, QR
-          использования, суммы и точки продаж.
-        </p>
+          {canManage && (
+            <PartnerLogoUploadCard
+              logoUrl={data?.partner?.logoUrl}
+              getToken={getToken}
+              onUploaded={() => {
+                void dashboardQuery.refetch();
+              }}
+            />
+          )}
+        </div>
       </section>
 
       {dashboardQuery.error && (
@@ -110,75 +132,85 @@ export default function PartnerDashboardPage(): JSX.Element {
         </div>
       )}
 
-      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => (
-          <div
-            key={metric.label}
-            className="rounded-[28px] bg-[#17384B] p-5 text-white shadow-[0_16px_32px_rgba(15,23,42,0.08)]"
-          >
-            <p className="text-sm font-semibold text-[#DDE8EA]">
-              {metric.label}
-            </p>
-            <p className="mt-2 text-4xl font-black">{metric.value}</p>
-            <p className="mt-2 text-sm text-[#FFB5A4]">{metric.hint}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleSections.map((section) => (
-          <Link
-            key={section.href}
-            href={section.href}
-            className="rounded-[28px] border border-[#E5ECE9] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4]"
-          >
-            <h2 className="text-xl font-bold text-[#17384B]">
-              {section.title}
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-              {section.description}
-            </p>
-            <span className="mt-5 inline-flex text-sm font-black text-[#FF7F6E]">
-              Открыть →
-            </span>
-          </Link>
-        ))}
-      </section>
-
-      <section className="mt-6 rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-        <h2 className="text-xl font-bold text-[#17384B]">
-          Последние использования
-        </h2>
-        <div className="mt-4 grid gap-3">
-          {(data?.recentRedemptions ?? []).length === 0 ? (
-            <p className="text-sm text-[#6B7280]">Использований пока нет.</p>
-          ) : (
-            data?.recentRedemptions.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-2xl border border-[#E5ECE9] p-4"
-              >
-                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                  <div>
-                    <p className="font-bold text-[#17384B]">
-                      {item.offer?.title ?? "Скидка"}
-                    </p>
-                    <p className="mt-1 text-sm text-[#6B7280]">
-                      {item.student?.displayName ??
-                        item.student?.email ??
-                        "Студент"}{" "}
-                      · {item.location?.name ?? "Локация не указана"}
-                    </p>
-                  </div>
-                  <span className="w-fit rounded-2xl bg-[#F7F6F1] px-3 py-1 text-sm font-bold text-[#526470]">
-                    {item.status}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
+      {dashboardQuery.isLoading && !data ? (
+        <div className="mt-6 rounded-3xl bg-white p-6 text-[#6B7280]">
+          Загружаем кабинет партнёра...
         </div>
-      </section>
+      ) : (
+        <>
+          <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {metrics.map((metric) => (
+              <div
+                key={metric.label}
+                className="rounded-[28px] bg-[#17384B] p-5 text-white shadow-[0_16px_32px_rgba(15,23,42,0.08)]"
+              >
+                <p className="text-sm font-semibold text-[#DDE8EA]">
+                  {metric.label}
+                </p>
+                <p className="mt-2 text-4xl font-black">{metric.value}</p>
+                <p className="mt-2 text-sm text-[#FFB5A4]">{metric.hint}</p>
+              </div>
+            ))}
+          </section>
+
+          <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {visibleSections.map((section) => (
+              <Link
+                key={section.href}
+                href={section.href}
+                className="rounded-[28px] border border-[#E5ECE9] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)] transition hover:-translate-y-1 hover:border-[#FFB5A4]"
+              >
+                <h2 className="text-xl font-bold text-[#17384B]">
+                  {section.title}
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-[#6B7280]">
+                  {section.description}
+                </p>
+                <span className="mt-5 inline-flex text-sm font-black text-[#FF7F6E]">
+                  Открыть →
+                </span>
+              </Link>
+            ))}
+          </section>
+
+          <section className="mt-6 rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+            <h2 className="text-xl font-bold text-[#17384B]">
+              Последние использования
+            </h2>
+            <div className="mt-4 grid gap-3">
+              {(data?.recentRedemptions ?? []).length === 0 ? (
+                <p className="text-sm text-[#6B7280]">
+                  Использований пока нет.
+                </p>
+              ) : (
+                data?.recentRedemptions.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-[#E5ECE9] p-4"
+                  >
+                    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                      <div>
+                        <p className="font-bold text-[#17384B]">
+                          {item.offer?.title ?? "Скидка"}
+                        </p>
+                        <p className="mt-1 text-sm text-[#6B7280]">
+                          {item.student?.displayName ??
+                            item.student?.email ??
+                            "Студент"}{" "}
+                          · {item.location?.name ?? "Локация не указана"}
+                        </p>
+                      </div>
+                      <span className="w-fit rounded-2xl bg-[#F7F6F1] px-3 py-1 text-sm font-bold text-[#526470]">
+                        {item.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
