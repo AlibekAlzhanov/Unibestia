@@ -40,6 +40,7 @@ export enum OfferStatus {
   ARCHIVED = "archived",
 }
 
+@Index("idx_offers_partner_status", ["partnerId", "status"])
 @Entity("offers")
 @Check(`"discount_value" IS NULL OR "discount_value" >= 0`)
 @Check(`"cashback_percent" IS NULL OR ("cashback_percent" >= 0 AND "cashback_percent" <= 100)`)
@@ -158,7 +159,9 @@ export class Offer {
   @DeleteDateColumn({ name: "deleted_at", type: "timestamptz", nullable: true })
   deletedAt: Date | null;
 
-  @ManyToOne(() => Partner, (partner) => partner.offers, { onDelete: "CASCADE" })
+  @ManyToOne(() => Partner, (partner) => partner.offers, {
+    onDelete: "CASCADE",
+  })
   @JoinColumn({ name: "partner_id" })
   partner: Partner;
 
@@ -168,7 +171,9 @@ export class Offer {
   @JoinColumn({ name: "category_id" })
   category: OfferCategory;
 
-  @ManyToOne(() => User, (user) => user.createdOffers, { onDelete: "RESTRICT" })
+  @ManyToOne(() => User, (user) => user.createdOffers, {
+    onDelete: "RESTRICT",
+  })
   @JoinColumn({ name: "created_by_user_id" })
   createdByUser: User;
 

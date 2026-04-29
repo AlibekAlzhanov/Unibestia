@@ -24,6 +24,8 @@ export enum RedemptionStatus {
   CANCELLED = "cancelled",
 }
 
+@Index("idx_redemptions_partner_status", ["partnerId", "status"])
+@Index("idx_redemptions_partner_created", ["partnerId", "createdAt"])
 @Entity("redemptions")
 @Check(`"order_amount" IS NULL OR "order_amount" >= 0`)
 @Check(`"discount_amount" IS NULL OR "discount_amount" >= 0`)
@@ -105,7 +107,9 @@ export class Redemption {
   @JoinColumn({ name: "offer_id" })
   offer: Offer;
 
-  @ManyToOne(() => Partner, (partner) => partner.redemptions, { onDelete: "CASCADE" })
+  @ManyToOne(() => Partner, (partner) => partner.redemptions, {
+    onDelete: "CASCADE",
+  })
   @JoinColumn({ name: "partner_id" })
   partner: Partner;
 

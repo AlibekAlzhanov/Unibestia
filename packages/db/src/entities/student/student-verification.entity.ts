@@ -24,6 +24,7 @@ export enum StudentVerificationRequestStatus {
   EXPIRED = "expired",
 }
 
+@Index("idx_student_verifications_status_created", ["status", "createdAt"])
 @Entity("student_verifications")
 export class StudentVerification {
   @PrimaryGeneratedColumn("uuid")
@@ -77,13 +78,19 @@ export class StudentVerification {
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 
-  @ManyToOne(() => User, (user) => user.studentVerifications, { onDelete: "CASCADE" })
+  @ManyToOne(() => User, (user) => user.studentVerifications, {
+    onDelete: "CASCADE",
+  })
   @JoinColumn({ name: "user_id" })
   user: User;
 
-  @ManyToOne(() => StudentProfile, (studentProfile) => studentProfile.verifications, {
-    onDelete: "CASCADE",
-  })
+  @ManyToOne(
+    () => StudentProfile,
+    (studentProfile) => studentProfile.verifications,
+    {
+      onDelete: "CASCADE",
+    }
+  )
   @JoinColumn({ name: "student_profile_id" })
   studentProfile: StudentProfile;
 
