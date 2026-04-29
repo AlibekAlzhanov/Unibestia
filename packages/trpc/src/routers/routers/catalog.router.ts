@@ -25,22 +25,7 @@ export class CatalogRouter {
 
     getHomeOffers: procedure.query(async () => {
       try {
-        const [featuredOffers, newOffers] = await Promise.all([
-          this.catalogService.listOffers({
-            featuredOnly: true,
-            limit: 6,
-            offset: 0,
-          }),
-          this.catalogService.listOffers({
-            limit: 6,
-            offset: 0,
-          }),
-        ]);
-
-        return {
-          featuredOffers: featuredOffers.items,
-          newOffers: newOffers.items,
-        };
+        return await this.catalogService.getHomeOffers();
       } catch (error) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",

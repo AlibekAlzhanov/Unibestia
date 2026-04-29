@@ -9,6 +9,26 @@ export interface CatalogListOffersInput {
   offset: number;
 }
 
+function normalizeLimit(limit: number): number {
+  return Math.min(Math.max(limit, 1), 50);
+}
+
+function normalizeOffset(offset: number): number {
+  return Math.max(offset, 0);
+}
+
+function uniqueNonEmptyIds(ids: Array<string | null | undefined>): string[] {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
+}
+
+function calculateAverageRating(reviews: Array<{ rating: number }>): number | null {
+  if (reviews.length === 0) {
+    return null;
+  }
+
+  return reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
+}
+
 @Injectable()
 export class CatalogService {
   constructor(
@@ -30,37 +50,63 @@ export class CatalogService {
     }));
   }
 
+  async getHomeOffers() {
+    const [featuredOffers, newOffers] = await Promise.all([
+      this.listOffers({
+        featuredOnly: true,
+        limit: 6,
+        offset: 0,
+      }),
+      this.listOffers({
+        limit: 6,
+        offset: 0,
+      }),
+    ]);
+
+    return {
+      featuredOffers: featuredOffers.items,
+      newOffers: newOffers.items,
+    };
+  }
+
   async listOffers(input: CatalogListOffersInput) {
-    const category = input.categorySlug
-      ? await this.offersService.findCategoryBySlug(input.categorySlug)
+    const limit = normalizeLimit(input.limit);
+    const offset = normalizeOffset(input.offset);
+    const categorySlug = input.categorySlug?.trim();
+    const search = input.search?.trim();
+
+    const category = categorySlug
+      ? await this.offersService.findCategoryBySlug(categorySlug)
       : null;
 
-    if (input.categorySlug && !category) {
-      throw new NotFoundException(
-        `Category '${input.categorySlug}' not found`
-      );
+    if (categorySlug && !category) {
+      throw new NotFoundException(`Category '${categorySlug}' not found`);
     }
 
     const [offers, total] = await this.offersService.listPublishedOffers({
       categoryId: category?.id,
-      search: input.search,
+      search: search && search.length > 0 ? search : undefined,
       featuredOnly: input.featuredOnly,
-      limit: input.limit,
-      offset: input.offset,
+      limit,
+      offset,
     });
 
     const offerIds = offers.map((offer) => offer.id);
-    const partnerIds = [...new Set(offers.map((offer) => offer.partnerId))];
-    const categoryIds = [...new Set(offers.map((offer) => offer.categoryId))];
+    const partnerIds = uniqueNonEmptyIds(offers.map((offer) => offer.partnerId));
+    const categoryIds = uniqueNonEmptyIds(
+      offers.map((offer) => offer.categoryId)
+    );
 
-    const coverMap = await this.offersService.getOfferCoverMap(offerIds);
-    const partnerMap = await this.offersService.getPartnerMap(partnerIds);
-    const categoryMap = await this.offersService.getCategoryMap(categoryIds);
+    const [coverMap, partnerMap, categoryMap] = await Promise.all([
+      this.offersService.getOfferCoverMap(offerIds),
+      this.offersService.getPartnerMap(partnerIds),
+      this.offersService.getCategoryMap(categoryIds),
+    ]);
 
     return {
       total,
-      limit: input.limit,
-      offset: input.offset,
+      limit,
+      offset,
       items: offers.map((offer) => {
         const cover = coverMap.get(offer.id) ?? null;
         const partner = partnerMap.get(offer.partnerId) ?? null;
@@ -109,10 +155,14 @@ export class CatalogService {
   }
 
   async getOfferBySlug(slug: string) {
-    const offer = await this.offersService.findPublishedOfferBySlug(slug);
+    const normalizedSlug = slug.trim();
+
+    const offer = await this.offersService.findPublishedOfferBySlug(
+      normalizedSlug
+    );
 
     if (!offer) {
-      throw new NotFoundException(`Published offer '${slug}' not found`);
+      throw new NotFoundException(`Published offer '${normalizedSlug}' not found`);
     }
 
     const [category, partner, media, offerLocations, reviews] =
@@ -124,15 +174,15 @@ export class CatalogService {
         this.offersService.listVisibleReviewsByOfferId(offer.id),
       ]);
 
-    const locations = await this.offersService.listPartnerLocationsByIds(
+    const locationIds = uniqueNonEmptyIds(
       offerLocations.map((item) => item.locationId)
     );
 
-    const averageRating =
-      reviews.length > 0
-        ? reviews.reduce((sum, review) => sum + review.rating, 0) /
-          reviews.length
-        : null;
+    const locations = await this.offersService.listPartnerLocationsByIds(
+      locationIds
+    );
+
+    const averageRating = calculateAverageRating(reviews);
 
     return {
       id: offer.id,
