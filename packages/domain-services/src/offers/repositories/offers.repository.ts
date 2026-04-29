@@ -21,6 +21,14 @@ export interface ListPublishedOffersParams {
   offset: number;
 }
 
+function uniqueNonEmptyIds(ids: Array<string | null | undefined>): string[] {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
 @Injectable()
 export class OffersRepository {
   constructor(
@@ -41,86 +49,175 @@ export class OffersRepository {
   ) {}
 
   async listActiveCategories(): Promise<OfferCategory[]> {
-    return this.offerCategoriesRepo.find({
-      where: { isActive: true },
-      order: { sortOrder: "ASC", name: "ASC" },
-    });
+    return this.offerCategoriesRepo
+      .createQueryBuilder("category")
+      .select([
+        "category.id",
+        "category.name",
+        "category.slug",
+        "category.parentId",
+        "category.sortOrder",
+        "category.isActive",
+        "category.createdAt",
+      ])
+      .where("category.isActive = :isActive", { isActive: true })
+      .orderBy("category.sortOrder", "ASC")
+      .addOrderBy("category.name", "ASC")
+      .getMany();
   }
 
   async findCategoryBySlug(slug: string): Promise<OfferCategory | null> {
-    return this.offerCategoriesRepo.findOne({ where: { slug, isActive: true } });
+    return this.offerCategoriesRepo
+      .createQueryBuilder("category")
+      .select([
+        "category.id",
+        "category.name",
+        "category.slug",
+        "category.parentId",
+        "category.sortOrder",
+        "category.isActive",
+        "category.createdAt",
+      ])
+      .where("category.slug = :slug", { slug })
+      .andWhere("category.isActive = :isActive", { isActive: true })
+      .getOne();
   }
 
-  async listPublishedOffers(params: ListPublishedOffersParams): Promise<[Offer[], number]> {
+  async listPublishedOffers(
+    params: ListPublishedOffersParams
+  ): Promise<[Offer[], number]> {
+    const limit = Math.min(Math.max(params.limit, 1), 50);
+    const offset = Math.max(params.offset, 0);
+
     const qb = this.offersRepo
       .createQueryBuilder("offer")
+      .select([
+        "offer.id",
+        "offer.partnerId",
+        "offer.categoryId",
+        "offer.title",
+        "offer.slug",
+        "offer.shortDescription",
+        "offer.description",
+        "offer.benefitType",
+        "offer.discountType",
+        "offer.discountValue",
+        "offer.cashbackPercent",
+        "offer.bonusRewardPoints",
+        "offer.minPurchaseAmount",
+        "offer.startAt",
+        "offer.endAt",
+        "offer.status",
+        "offer.isFeatured",
+        "offer.publishedAt",
+        "offer.createdAt",
+      ])
       .where("offer.status = :status", { status: OfferStatus.PUBLISHED });
 
     if (params.categoryId) {
-      qb.andWhere("offer.categoryId = :categoryId", { categoryId: params.categoryId });
+      qb.andWhere("offer.categoryId = :categoryId", {
+        categoryId: params.categoryId,
+      });
     }
 
     if (params.featuredOnly) {
       qb.andWhere("offer.isFeatured = :isFeatured", { isFeatured: true });
     }
 
-    if (params.search) {
+    const normalizedSearch = params.search?.trim();
+
+    if (normalizedSearch) {
+      const search = `%${escapeLikePattern(normalizedSearch)}%`;
+
       qb.andWhere(
-        `(LOWER(offer.title) LIKE LOWER(:search)
-          OR LOWER(COALESCE(offer.shortDescription, '')) LIKE LOWER(:search)
-          OR LOWER(offer.description) LIKE LOWER(:search))`,
-        { search: `%${params.search}%` }
+        `(offer.title ILIKE :search ESCAPE '\\'
+          OR COALESCE(offer.shortDescription, '') ILIKE :search ESCAPE '\\'
+          OR offer.description ILIKE :search ESCAPE '\\')`,
+        { search }
       );
     }
 
     qb.orderBy("offer.isFeatured", "DESC")
-      .addOrderBy("offer.publishedAt", "DESC")
+      .addOrderBy("offer.publishedAt", "DESC", "NULLS LAST")
       .addOrderBy("offer.createdAt", "DESC")
-      .skip(params.offset)
-      .take(params.limit);
+      .skip(offset)
+      .take(limit);
 
     return qb.getManyAndCount();
   }
 
   async findPublishedOfferBySlug(slug: string): Promise<Offer | null> {
-    return this.offersRepo.findOne({ where: { slug, status: OfferStatus.PUBLISHED } });
+    return this.offersRepo.findOne({
+      where: { slug, status: OfferStatus.PUBLISHED },
+    });
   }
 
   async getOfferCoverMap(offerIds: string[]): Promise<Map<string, OfferMedia>> {
-    if (offerIds.length === 0) return new Map<string, OfferMedia>();
+    const uniqueOfferIds = uniqueNonEmptyIds(offerIds);
+
+    if (uniqueOfferIds.length === 0) {
+      return new Map<string, OfferMedia>();
+    }
 
     const media = await this.offerMediaRepo
       .createQueryBuilder("media")
-      .where("media.offerId IN (:...offerIds)", { offerIds })
-      .orderBy("media.isCover", "DESC")
+      .distinctOn(["media.offerId"])
+      .where("media.offerId IN (:...offerIds)", { offerIds: uniqueOfferIds })
+      .orderBy("media.offerId", "ASC")
+      .addOrderBy("media.isCover", "DESC")
       .addOrderBy("media.sortOrder", "ASC")
       .addOrderBy("media.createdAt", "ASC")
       .getMany();
 
-    const result = new Map<string, OfferMedia>();
-    for (const item of media) {
-      if (!result.has(item.offerId)) result.set(item.offerId, item);
-    }
-    return result;
+    return new Map(media.map((item) => [item.offerId, item]));
   }
 
   async getPartnerMap(partnerIds: string[]): Promise<Map<string, Partner>> {
-    if (partnerIds.length === 0) return new Map<string, Partner>();
-    const partners = await this.partnersRepo.find({ where: { id: In(partnerIds) } });
+    const uniquePartnerIds = uniqueNonEmptyIds(partnerIds);
+
+    if (uniquePartnerIds.length === 0) {
+      return new Map<string, Partner>();
+    }
+
+    const partners = await this.partnersRepo
+      .createQueryBuilder("partner")
+      .select(["partner.id", "partner.brandName", "partner.logoUrl"])
+      .where("partner.id IN (:...partnerIds)", {
+        partnerIds: uniquePartnerIds,
+      })
+      .getMany();
+
     return new Map(partners.map((partner) => [partner.id, partner]));
   }
 
-  async getCategoryMap(categoryIds: string[]): Promise<Map<string, OfferCategory>> {
-    if (categoryIds.length === 0) return new Map<string, OfferCategory>();
-    const categories = await this.offerCategoriesRepo.find({ where: { id: In(categoryIds) } });
+  async getCategoryMap(
+    categoryIds: string[]
+  ): Promise<Map<string, OfferCategory>> {
+    const uniqueCategoryIds = uniqueNonEmptyIds(categoryIds);
+
+    if (uniqueCategoryIds.length === 0) {
+      return new Map<string, OfferCategory>();
+    }
+
+    const categories = await this.offerCategoriesRepo
+      .createQueryBuilder("category")
+      .select(["category.id", "category.name", "category.slug"])
+      .where("category.id IN (:...categoryIds)", {
+        categoryIds: uniqueCategoryIds,
+      })
+      .getMany();
+
     return new Map(categories.map((category) => [category.id, category]));
   }
 
   async listOfferMedia(offerId: string): Promise<OfferMedia[]> {
-    return this.offerMediaRepo.find({
-      where: { offerId },
-      order: { isCover: "DESC", sortOrder: "ASC", createdAt: "ASC" },
-    });
+    return this.offerMediaRepo
+      .createQueryBuilder("media")
+      .where("media.offerId = :offerId", { offerId })
+      .orderBy("media.isCover", "DESC")
+      .addOrderBy("media.sortOrder", "ASC")
+      .addOrderBy("media.createdAt", "ASC")
+      .getMany();
   }
 
   async listOfferLocations(offerId: string): Promise<OfferLocation[]> {
@@ -128,8 +225,15 @@ export class OffersRepository {
   }
 
   async listPartnerLocationsByIds(ids: string[]): Promise<PartnerLocation[]> {
-    if (ids.length === 0) return [];
-    return this.partnerLocationsRepo.find({ where: { id: In(ids) } });
+    const uniqueLocationIds = uniqueNonEmptyIds(ids);
+
+    if (uniqueLocationIds.length === 0) {
+      return [];
+    }
+
+    return this.partnerLocationsRepo.find({
+      where: { id: In(uniqueLocationIds) },
+    });
   }
 
   async findPartnerById(partnerId: string): Promise<Partner | null> {
@@ -141,10 +245,12 @@ export class OffersRepository {
   }
 
   async listVisibleReviewsByOfferId(offerId: string): Promise<Review[]> {
-    return this.reviewsRepo.find({
-      where: { offerId, status: ReviewStatus.VISIBLE },
-      order: { createdAt: "DESC" },
-      take: 20,
-    });
+    return this.reviewsRepo
+      .createQueryBuilder("review")
+      .where("review.offerId = :offerId", { offerId })
+      .andWhere("review.status = :status", { status: ReviewStatus.VISIBLE })
+      .orderBy("review.createdAt", "DESC")
+      .take(20)
+      .getMany();
   }
 }
