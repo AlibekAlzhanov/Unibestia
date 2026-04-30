@@ -65,6 +65,7 @@ export function Navbar(): JSX.Element {
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const profileQuery = useQuery({
     ...trpc.profile.getMyProfile.queryOptions(),
@@ -111,6 +112,7 @@ export function Navbar(): JSX.Element {
 
   useEffect(() => {
     setIsProfileMenuOpen(false);
+    setIsMobileMenuOpen(false);
   }, [pathname]);
 
   const profile = profileQuery.data as NavbarProfile | undefined;
@@ -125,7 +127,7 @@ export function Navbar(): JSX.Element {
   const email = profile?.user.email ?? "";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#E8ECE8] bg-white/88 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-[#E8ECE8] bg-white/88 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-md">
       <div className="mx-auto flex h-[72px] w-full max-w-[1280px] items-center justify-between px-4 md:px-6 lg:px-8">
         <Logo href={isSignedIn ? "/home" : "/"} size="md" />
 
@@ -165,13 +167,23 @@ export function Navbar(): JSX.Element {
 
             <Button
               asChild
-              className="h-10 rounded-[18px] border-0 bg-[#FF9F8A] px-4 text-[14px] font-semibold text-white shadow-[0_10px_20px_rgba(255,159,138,0.18)] hover:bg-[#F28977]"
+              className="ub-gradient-button hidden h-10 rounded-[18px] border-0 px-4 text-[14px] font-semibold text-white md:inline-flex"
             >
               <Link href="/register">Регистрация</Link>
             </Button>
           </SignedOut>
 
           <SignedIn>
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((current) => !current)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-[18px] border border-[#E5ECE9] bg-[#F9FAF8] text-lg font-black text-[#17384B] transition hover:border-[#FFB5A4] hover:bg-white lg:hidden"
+              aria-label="Открыть меню"
+              aria-expanded={isMobileMenuOpen}
+            >
+              {isMobileMenuOpen ? "×" : "☰"}
+            </button>
+
             <div ref={menuRef} className="relative">
               <button
                 type="button"
@@ -207,7 +219,7 @@ export function Navbar(): JSX.Element {
               {isProfileMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-3 w-[280px] overflow-hidden rounded-[24px] border border-[#E5ECE9] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
+                  className="ub-animate-slide-down absolute right-0 mt-3 w-[280px] overflow-hidden rounded-[24px] border border-[#E5ECE9] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
                 >
                   <div className="border-b border-[#E5ECE9] bg-[#F9FAF8] p-4">
                     <div className="flex items-center gap-3">
@@ -250,9 +262,7 @@ export function Navbar(): JSX.Element {
                           role="menuitem"
                           className={[
                             "block rounded-2xl px-4 py-3 transition",
-                            isActive
-                              ? "bg-[#FFF0EB]"
-                              : "hover:bg-[#F7F6F1]",
+                            isActive ? "bg-[#FFF0EB]" : "hover:bg-[#F7F6F1]",
                           ].join(" ")}
                         >
                           <span className="block text-sm font-black text-[#17384B]">
@@ -283,6 +293,80 @@ export function Navbar(): JSX.Element {
           </SignedIn>
         </div>
       </div>
+
+      <SignedIn>
+        {isMobileMenuOpen && (
+          <div className="ub-animate-slide-down absolute left-4 right-4 top-[76px] z-50 rounded-[28px] border border-[#E5ECE9] bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.14)] lg:hidden">
+            <div className="mb-2 rounded-[22px] bg-[#F9FAF8] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FF7F6E]">
+                UniBestia
+              </p>
+              <p className="mt-1 text-sm font-bold text-[#17384B]">
+                Студенческая витрина скидок
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              {studentLinks.map((link) => {
+                const isActive =
+                  pathname === link.href ||
+                  pathname.startsWith(`${link.href}/`);
+
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={[
+                      "rounded-2xl px-4 py-3 text-sm font-black transition",
+                      isActive
+                        ? "bg-[#FFF0EB] text-[#17384B]"
+                        : "text-[#526470] hover:bg-[#F7F6F1] hover:text-[#17384B]",
+                    ].join(" ")}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+
+              <div className="my-2 h-px bg-[#E5ECE9]" />
+
+              {dropdownLinks.map((link) => {
+                const isActive =
+                  pathname === link.href ||
+                  pathname.startsWith(`${link.href}/`);
+
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={[
+                      "rounded-2xl px-4 py-3 transition",
+                      isActive ? "bg-[#FFF0EB]" : "hover:bg-[#F7F6F1]",
+                    ].join(" ")}
+                  >
+                    <span className="block text-sm font-black text-[#17384B]">
+                      {link.label}
+                    </span>
+                    <span className="mt-1 block text-xs text-[#6B7280]">
+                      {link.description}
+                    </span>
+                  </Link>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  void signOut({ redirectUrl: "/" });
+                }}
+                className="rounded-2xl px-4 py-3 text-left text-sm font-black text-red-600 transition hover:bg-red-50"
+              >
+                Выйти из аккаунта
+              </button>
+            </div>
+          </div>
+        )}
+      </SignedIn>
     </header>
   );
 }

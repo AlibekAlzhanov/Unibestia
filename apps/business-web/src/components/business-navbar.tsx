@@ -125,6 +125,7 @@ export function BusinessNavbar(): JSX.Element {
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const meQuery = useQuery({
     ...trpc.business.auth.getMe.queryOptions(),
@@ -212,6 +213,7 @@ export function BusinessNavbar(): JSX.Element {
 
   useEffect(() => {
     setIsProfileMenuOpen(false);
+    setIsMobileMenuOpen(false);
   }, [pathname]);
 
   const displayName =
@@ -228,7 +230,7 @@ export function BusinessNavbar(): JSX.Element {
   const partnerName = me?.partner?.brandName ?? null;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#E8ECE8] bg-white/88 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-[#E8ECE8] bg-white/88 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-md">
       <div className="mx-auto flex h-[72px] w-full max-w-[1280px] items-center justify-between px-4 md:px-6 lg:px-8">
         <Link href="/" className="group flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#17384B] text-base font-black text-white shadow-[0_10px_20px_rgba(23,56,75,0.16)] transition group-hover:bg-[#FF9F8A]">
@@ -285,13 +287,23 @@ export function BusinessNavbar(): JSX.Element {
 
             <Link
               href="/sign-up"
-              className="hidden h-10 rounded-[18px] bg-[#FF9F8A] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(255,159,138,0.18)] transition hover:bg-[#F28977] md:inline-flex"
+              className="ub-gradient-button hidden h-10 rounded-[18px] px-4 py-2 text-sm font-semibold text-white md:inline-flex"
             >
               Регистрация
             </Link>
           </SignedOut>
 
           <SignedIn>
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((current) => !current)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-[18px] border border-[#E5ECE9] bg-[#F9FAF8] text-lg font-black text-[#17384B] transition hover:border-[#FFB5A4] hover:bg-white lg:hidden"
+              aria-label="Открыть меню"
+              aria-expanded={isMobileMenuOpen}
+            >
+              {isMobileMenuOpen ? "×" : "☰"}
+            </button>
+
             <div ref={menuRef} className="relative">
               <button
                 type="button"
@@ -327,7 +339,7 @@ export function BusinessNavbar(): JSX.Element {
               {isProfileMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-3 w-[310px] overflow-hidden rounded-[24px] border border-[#E5ECE9] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
+                  className="ub-animate-slide-down absolute right-0 mt-3 w-[310px] overflow-hidden rounded-[24px] border border-[#E5ECE9] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.14)]"
                 >
                   <div className="border-b border-[#E5ECE9] bg-[#F9FAF8] p-4">
                     <div className="flex items-center gap-3">
@@ -427,6 +439,83 @@ export function BusinessNavbar(): JSX.Element {
           </SignedIn>
         </div>
       </div>
+
+      <SignedIn>
+        {isMobileMenuOpen && (
+          <div className="ub-animate-slide-down absolute left-4 right-4 top-[76px] z-50 rounded-[28px] border border-[#E5ECE9] bg-white p-3 shadow-[0_24px_60px_rgba(15,23,42,0.14)] lg:hidden">
+            <div className="mb-2 rounded-[22px] bg-[#F9FAF8] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FF7F6E]">
+                UniBestia Business
+              </p>
+              <p className="mt-1 text-sm font-bold text-[#17384B]">
+                Портал партнёров, сотрудников и администраторов
+              </p>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span
+                  className={[
+                    "rounded-full border px-3 py-1 text-[11px] font-black",
+                    accessBadgeClassNames[businessAccess],
+                  ].join(" ")}
+                >
+                  {meQuery.isLoading
+                    ? "Проверяем доступ"
+                    : accessLabels[businessAccess]}
+                </span>
+
+                {partnerName && (
+                  <span className="rounded-full border border-[#E5ECE9] bg-white px-3 py-1 text-[11px] font-black text-[#526470]">
+                    {partnerName}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              {dropdownLinks.map((link) => {
+                const isActive = isActivePath(pathname, link.href);
+
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={[
+                      "rounded-2xl px-4 py-3 transition",
+                      isActive ? "bg-[#FFF0EB]" : "hover:bg-[#F7F6F1]",
+                    ].join(" ")}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-black text-[#17384B]">
+                      {link.label}
+
+                      {link.isDev && (
+                        <span className="rounded-full bg-[#17384B] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-white">
+                          dev
+                        </span>
+                      )}
+                    </span>
+
+                    {link.description && (
+                      <span className="mt-1 block text-xs text-[#6B7280]">
+                        {link.description}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  void signOut({ redirectUrl: "/login" });
+                }}
+                className="rounded-2xl px-4 py-3 text-left text-sm font-black text-red-600 transition hover:bg-red-50"
+              >
+                Выйти из аккаунта
+              </button>
+            </div>
+          </div>
+        )}
+      </SignedIn>
     </header>
   );
 }
