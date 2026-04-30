@@ -1,3 +1,6 @@
+/* eslint-env node */
+/* global module */
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -9,14 +12,6 @@ const nextConfig = {
   ],
   images: {
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "placehold.co",
-      },
-      {
-        protocol: "https",
-        hostname: "example.local",
-      },
       {
         protocol: "https",
         hostname: "img.clerk.com",
