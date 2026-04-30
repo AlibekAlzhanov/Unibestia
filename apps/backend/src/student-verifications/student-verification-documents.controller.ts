@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   Inject,
+  Logger,
   NotFoundException,
   Param,
   Post,
@@ -94,6 +95,10 @@ const pdfParse: PdfParse =
 
 @Controller("student-verifications")
 export class StudentVerificationDocumentsController {
+  private readonly logger = new Logger(
+    StudentVerificationDocumentsController.name
+  );
+
   private readonly maxPdfSizeBytes = 5 * 1024 * 1024;
 
   constructor(
@@ -282,7 +287,10 @@ export class StudentVerificationDocumentsController {
     try {
       parsedPdf = await pdfParse(storedObject.body);
     } catch (error) {
-      console.error("Student verification PDF parse failed:", error);
+      this.logger.error(
+        "Student verification PDF parse failed",
+        error instanceof Error ? error.stack : String(error)
+      );
 
       throw new BadRequestException(
         error instanceof Error

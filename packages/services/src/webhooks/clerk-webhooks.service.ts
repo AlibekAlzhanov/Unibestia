@@ -61,11 +61,11 @@ export class ClerkWebhooksService {
     body: Record<string, unknown>
   ): { received: boolean } {
     // Log the raw webhook headers
-    this.logger.debug(`Webhook received with headers:
-      svix-id: ${svixId}
-      svix-timestamp: ${svixTimestamp}
-      svix-signature: ${svixSignature}
-    `);
+    this.logger.debug(
+      `Webhook received: svix-id=${svixId}, svix-timestamp=${svixTimestamp}, signaturePresent=${Boolean(
+        svixSignature
+      )}`
+    );
 
     this.logger.debug(
       `Received Clerk webhook with body of type ${typeof body}`
@@ -79,10 +79,6 @@ export class ClerkWebhooksService {
     const webhookSecret = this.configService.get<string>(
       "CLERK_WEBHOOK_SECRET"
     );
-
-    // ---- TEMPORARY DEBUG LOG ----
-    this.logger.debug(`Retrieved CLERK_WEBHOOK_SECRET: '${webhookSecret}'`);
-    // -----------------------------
 
     if (!webhookSecret) {
       this.logger.error("CLERK_WEBHOOK_SECRET is not set");
