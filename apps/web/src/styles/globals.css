@@ -1,10 +1,283 @@
 @import "tailwindcss";
 @import "@repo/ui/styles.css";
 
-/**
- * Tailwind CSS official document:
- * https://tailwindcss.com/docs/detecting-classes-in-source-files
- *
- * if you ever need to explicitly add a source that's excluded by default, 
- * you can always add it with the @source directive.
- */
+/* ================================
+   UniBestia Design System
+   Shared tokens, animations, cards
+   ================================ */
+
+:root {
+  --ub-bg: #f7f6f1;
+  --ub-surface: #ffffff;
+  --ub-ink: #17384b;
+  --ub-muted: #5d7481;
+  --ub-border: #e5ece9;
+
+  --ub-coral: #ff9f8a;
+  --ub-coral-strong: #ff7f6e;
+  --ub-coral-soft: #fff0eb;
+
+  --ub-mint: #a6efee;
+  --ub-green: #bedd87;
+  --ub-blue-soft: #e4f2f9;
+
+  --ub-shadow-soft: 0 16px 36px rgba(15, 23, 42, 0.06);
+  --ub-shadow-hover: 0 26px 60px rgba(15, 23, 42, 0.13);
+  --ub-shadow-strong: 0 30px 80px rgba(15, 23, 42, 0.16);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  background: var(--ub-bg);
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(255, 159, 138, 0.34);
+  color: var(--ub-ink);
+}
+
+/* ================================
+   Animations
+   ================================ */
+
+@keyframes ub-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ub-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ub-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ub-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes ub-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.ub-animate-fade-up {
+  animation: ub-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ub-animate-fade-in {
+  animation: ub-fade-in 0.7s ease both;
+}
+
+.ub-animate-slide-down {
+  animation: ub-slide-down 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ub-animate-float {
+  animation: ub-float 7s ease-in-out infinite;
+}
+
+.ub-delay-100 {
+  animation-delay: 100ms;
+}
+
+.ub-delay-200 {
+  animation-delay: 200ms;
+}
+
+.ub-delay-300 {
+  animation-delay: 300ms;
+}
+
+.ub-delay-400 {
+  animation-delay: 400ms;
+}
+
+/* ================================
+   Reusable UI effects
+   ================================ */
+
+.ub-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--ub-border);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--ub-shadow-soft);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease;
+}
+
+.ub-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(255, 159, 138, 0.85);
+  box-shadow: var(--ub-shadow-hover);
+}
+
+.ub-glass-card {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.92),
+    rgba(255, 255, 255, 0.68)
+  );
+  box-shadow: var(--ub-shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.ub-gradient-button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #ff9f8a, #ff7f6e, #ffc06d);
+  box-shadow: 0 16px 32px rgba(255, 127, 110, 0.26);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    filter 220ms ease;
+}
+
+.ub-gradient-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 42px rgba(255, 127, 110, 0.34);
+  filter: saturate(1.08);
+}
+
+.ub-gradient-button::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.36),
+    transparent
+  );
+  transform: translateX(-100%);
+}
+
+.ub-gradient-button:hover::after {
+  animation: ub-shimmer 1.2s ease;
+}
+
+.ub-image-lift {
+  transition:
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 420ms ease;
+}
+
+.group:hover .ub-image-lift,
+.ub-image-lift:hover {
+  transform: scale(1.035);
+  filter: saturate(1.06) contrast(1.02);
+}
+
+.ub-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #eef2f0;
+}
+
+.ub-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.75),
+    transparent
+  );
+  animation: ub-shimmer 1.4s ease infinite;
+}
+
+.ub-focus-ring {
+  outline: none;
+}
+
+.ub-focus-ring:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(255, 159, 138, 0.32),
+    0 0 0 1px rgba(255, 127, 110, 0.55);
+}
+
+/* ================================
+   Responsive helpers
+   ================================ */
+
+.ub-page-shell {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+@media (min-width: 640px) {
+  .ub-page-shell {
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ub-page-shell {
+    padding-inline: 2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .ub-gradient-button:hover::after,
+  .ub-skeleton::after {
+    animation: none !important;
+  }
+}
