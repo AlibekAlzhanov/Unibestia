@@ -476,10 +476,10 @@ export default function ProfilePage(): JSX.Element {
           <p className="mt-2 text-sm leading-6">{profileQuery.error.message}</p>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
           <form
             onSubmit={handleSave}
-            className="ub-animate-fade-up ub-card rounded-[34px] p-6 md:p-7"
+            className="ub-animate-fade-up ub-card self-start rounded-[34px] p-6 md:p-7"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -838,7 +838,7 @@ export default function ProfilePage(): JSX.Element {
                   studentProfile?.verificationStatus === "pending_review" ||
                   studentProfile?.verificationStatus === "verified"
                 }
-                className="mt-5 w-full rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-black text-white transition hover:bg-[#255B73] disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-5 w-full rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-black text-white shadow-[0_14px_30px_rgba(23,56,75,0.18)] transition hover:-translate-y-0.5 hover:bg-[#255B73] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmittingVerification
                   ? "Загружаем..."

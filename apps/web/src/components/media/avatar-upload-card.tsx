@@ -69,6 +69,14 @@ export function AvatarUploadCard({
     [displayName, email]
   );
 
+  const previewUrl = useMemo(() => {
+    if (!avatarFile) {
+      return null;
+    }
+
+    return URL.createObjectURL(avatarFile);
+  }, [avatarFile]);
+
   async function uploadAvatar(): Promise<void> {
     if (!avatarFile) {
       setError("Выберите фото профиля.");
@@ -131,40 +139,76 @@ export function AvatarUploadCard({
   }
 
   return (
-    <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-      <h2 className="text-xl font-black text-[#17384B]">Аватарка профиля</h2>
-      <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-        Фото будет отображаться в профиле и в верхней панели сайта.
-      </p>
-
-      <div className="mt-5 flex items-center gap-4">
-        {avatarUrl ? (
-          <Image
-            src={avatarUrl}
-            alt="Аватарка пользователя"
-            width={96}
-            height={96}
-            sizes="96px"
-            className="h-24 w-24 rounded-full border border-[#E5ECE9] object-cover"
-          />
-        ) : (
-          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-[#E5ECE9] bg-[#17384B] text-2xl font-black text-white">
-            {initials}
-          </div>
-        )}
-
+    <section className="ub-card rounded-[34px] p-6 md:p-7">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="font-bold text-[#17384B]">
-            {displayName || email || "Пользователь"}
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+            Avatar
           </p>
-          <p className="mt-1 text-sm text-[#6B7280]">
-            JPG, PNG или WEBP до 2 MB.
+
+          <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+            Аватарка профиля
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-[#6B7280]">
+            Фото будет отображаться в профиле, верхней панели и личном кабинете.
           </p>
+        </div>
+
+        <span className="w-fit rounded-full bg-[#FFF0EB] px-3 py-1 text-xs font-black text-[#FF7F6E]">
+          до 2 MB
+        </span>
+      </div>
+
+      <div className="mt-6 rounded-[28px] border border-[#E5ECE9] bg-[#F9FAF8] p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="relative mx-auto h-24 w-24 shrink-0 sm:mx-0">
+            {previewUrl ? (
+              <Image
+                src={previewUrl}
+                alt="Предпросмотр аватарки"
+                width={96}
+                height={96}
+                sizes="96px"
+                className="h-24 w-24 rounded-full border-4 border-white object-cover shadow-[0_14px_30px_rgba(15,23,42,0.12)]"
+              />
+            ) : avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                alt="Аватарка пользователя"
+                width={96}
+                height={96}
+                sizes="96px"
+                className="h-24 w-24 rounded-full border-4 border-white object-cover shadow-[0_14px_30px_rgba(15,23,42,0.12)]"
+              />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-white bg-[linear-gradient(135deg,#17384B,#FF9F8A)] text-2xl font-black text-white shadow-[0_14px_30px_rgba(15,23,42,0.12)]">
+                {initials}
+              </div>
+            )}
+
+            <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-2 border-white bg-green-500" />
+          </div>
+
+          <div className="min-w-0 flex-1 text-center sm:text-left">
+            <p className="truncate text-base font-black text-[#17384B]">
+              {displayName || email || "Пользователь"}
+            </p>
+
+            <p className="mt-1 truncate text-sm text-[#6B7280]">
+              {email || "email не указан"}
+            </p>
+
+            <p className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-[#9CA3AF]">
+              JPG, PNG или WEBP
+            </p>
+          </div>
         </div>
       </div>
 
       <label className="mt-5 block">
-        <span className="text-sm font-bold text-[#17384B]">Фото профиля</span>
+        <span className="text-sm font-black text-[#17384B]">Фото профиля</span>
+
         <input
           type="file"
           accept="image/jpeg,image/png,image/webp"
@@ -174,19 +218,22 @@ export function AvatarUploadCard({
       </label>
 
       {avatarFile && (
-        <p className="mt-3 text-sm text-[#6B7280]">
-          {avatarFile.name} · {(avatarFile.size / 1024 / 1024).toFixed(2)} MB
-        </p>
+        <div className="mt-3 rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] p-4 text-sm text-[#526470]">
+          <p className="font-black text-[#17384B]">{avatarFile.name}</p>
+          <p className="mt-1">
+            Размер: {(avatarFile.size / 1024 / 1024).toFixed(2)} MB
+          </p>
+        </div>
       )}
 
       {message && (
-        <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-700">
+        <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
           {message}
         </div>
       )}
 
       {error && (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
           {error}
         </div>
       )}
@@ -195,7 +242,7 @@ export function AvatarUploadCard({
         type="button"
         onClick={uploadAvatar}
         disabled={isUploading || !avatarFile}
-        className="mt-5 w-full rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
+        className="ub-gradient-button mt-5 w-full rounded-2xl px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isUploading ? "Загружаем..." : "Загрузить аватарку"}
       </button>
