@@ -107,9 +107,7 @@ async function sendBatchEvents(
   events: Array<{ name: string; properties?: PostHogEventProperties }>
 ): Promise<void> {
   // Get API key and host from environment variables or use defaults
-  const apiKey =
-    process.env.POSTHOG_API_KEY ||
-    "phc_dlOzBVvXm38UDi9DVCjqfdEbp3FH7b248nYVrSa2ASG";
+  const apiKey = process.env.POSTHOG_API_KEY;
   const apiHost = process.env.POSTHOG_HOST;
 
   if (!apiKey) {
