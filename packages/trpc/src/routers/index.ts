@@ -5,6 +5,7 @@ import { AdminStudentVerificationsRouter } from "./routers/admin-student-verific
 import { AuthRouter } from "./routers/auth.router.js";
 import { BusinessRouter } from "./routers/business.router.js";
 import { CatalogRouter } from "./routers/catalog.router.js";
+import { NotificationsRouter } from "./routers/notifications.router.js";
 import { ProfileRouter } from "./routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/redemptions.router.js";
 import { WalletRouter } from "./routers/wallet.router.js";
@@ -18,6 +19,7 @@ export class AppRouterClass {
     private readonly walletRouter: WalletRouter,
     private readonly redemptionsRouter: RedemptionsRouter,
     private readonly businessRouter: BusinessRouter,
+    private readonly notificationsRouter: NotificationsRouter,
     private readonly adminStudentVerificationsRouter: AdminStudentVerificationsRouter
   ) {}
 
@@ -29,6 +31,7 @@ export class AppRouterClass {
       wallet: this.walletRouter.router,
       redemptions: this.redemptionsRouter.router,
       business: this.businessRouter.router,
+      notifications: this.notificationsRouter.router,
       adminStudentVerifications: this.adminStudentVerificationsRouter.router,
     });
   }

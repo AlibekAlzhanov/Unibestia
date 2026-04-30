@@ -13,11 +13,12 @@ import { useTRPC } from "@/utils/trpc";
 const studentLinks = [
   { href: "/home", label: "Главная" },
   { href: "/catalog", label: "Каталог" },
-  { href: "/favorites", label: "Избранное" },
 ];
 
 const dropdownLinks = [
   { href: "/profile", label: "Профиль", description: "Данные студента" },
+  { href: "/favorites", label: "Избранное", description: "Избранные скидки"},
+  { href: "/notifications", label: "Уведомления", description: "События и статусы"},
   { href: "/wallet", label: "Кошелёк", description: "Бонусы и баланс" },
   { href: "/my-redemptions", label: "Мои скидки", description: "QR и история" },
 ];

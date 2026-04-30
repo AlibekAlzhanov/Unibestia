@@ -6,6 +6,7 @@ import {
   AuditLog,
   FavoriteOffer,
   ModerationTask,
+  Notification,
   Offer,
   OfferCategory,
   OfferLocation,
@@ -35,6 +36,7 @@ import { AdminStudentVerificationsRouter } from "./routers/routers/admin-student
 import { AuthRouter } from "./routers/routers/auth.router.js";
 import { BusinessRouter } from "./routers/routers/business.router.js";
 import { CatalogRouter } from "./routers/routers/catalog.router.js";
+import { NotificationsRouter } from "./routers/routers/notifications.router.js";
 import { ProfileRouter } from "./routers/routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/routers/redemptions.router.js";
 import { WalletRouter } from "./routers/routers/wallet.router.js";
@@ -52,6 +54,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
       AuditLog,
       FavoriteOffer,
       ModerationTask,
+      Notification,
       User,
       UserRole,
       Role,
@@ -78,6 +81,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     WalletRouter,
     RedemptionsRouter,
     BusinessRouter,
+    NotificationsRouter,
     AdminStudentVerificationsRouter,
     AuthService,
   ],
