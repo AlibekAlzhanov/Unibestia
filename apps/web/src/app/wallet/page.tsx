@@ -5,161 +5,87 @@ import { type JSX, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
 
-type RedemptionItem = {
+type WalletData = {
   id: string;
-  status: string;
-  qrToken: string;
-  qrExpiresAt?: Date | string | null;
-  usedAt?: Date | string | null;
-  cancelledAt?: Date | string | null;
-  createdAt?: Date | string | null;
-  offer?: {
-    slug?: string | null;
-    title?: string | null;
-    shortDescription?: string | null;
-    bonusRewardPoints?: number | null;
-    cashbackPercent?: string | null;
-    discountType?: string | null;
-    discountValue?: string | null;
-  } | null;
-  location?: {
-    name?: string | null;
-    city?: string | null;
-    address?: string | null;
-  } | null;
+  userId: string;
+  availableBalance: number;
+  lifetimeEarned: number;
+  lifetimeSpent: number;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
-type WalletEvent = {
+type WalletTransaction = {
   id: string;
-  title: string;
-  description: string;
-  amount: number;
-  type: "bonus" | "cashback" | "discount" | "qr";
-  date: Date | string | null | undefined;
-  status: string;
-  href?: string;
+  walletId: string;
+  userId: string;
+  type: string;
+  sourceType: string;
+  sourceId: string | null;
+  pointsDelta: number;
+  balanceAfter: number;
+  expiresAt: Date | string | null;
+  comment: string | null;
+  createdAt: Date | string;
+};
+
+type TransactionsData = {
+  total: number;
+  limit: number;
+  offset: number;
+  items: WalletTransaction[];
 };
 
 function formatDateTime(value?: Date | string | null): string {
   if (!value) {
-    return "не указано";
+    return "—";
   }
 
   return new Date(value).toLocaleString("ru-RU");
 }
 
-function isActiveRedemption(item: RedemptionItem): boolean {
-  return item.status === "created" || item.status === "confirmed";
-}
-
-function getEstimatedBenefit(item: RedemptionItem): number {
-  const offer = item.offer;
-
-  if (!offer) {
-    return 0;
-  }
-
-  if (offer.bonusRewardPoints) {
-    return offer.bonusRewardPoints;
-  }
-
-  if (offer.cashbackPercent) {
-    return Number(offer.cashbackPercent);
-  }
-
-  if (offer.discountType === "percent" && offer.discountValue) {
-    return Number(offer.discountValue);
-  }
-
-  if (offer.discountType === "fixed_amount" && offer.discountValue) {
-    return Math.round(Number(offer.discountValue) / 100);
-  }
-
-  return 0;
-}
-
-function getWalletEvents(items: RedemptionItem[]): WalletEvent[] {
-  return items.map((item) => {
-    const benefit = getEstimatedBenefit(item);
-    const title = item.offer?.title ?? "Скидка UniBestia";
-    const location = item.location?.name ?? "Локация не указана";
-
-    if (item.status === "used") {
-      return {
-        id: item.id,
-        title,
-        description: `Скидка использована: ${location}`,
-        amount: benefit,
-        type: "discount",
-        date: item.usedAt ?? item.createdAt,
-        status: item.status,
-        href: item.offer?.slug ? `/offer/${item.offer.slug}` : undefined,
-      };
-    }
-
-    if (isActiveRedemption(item)) {
-      return {
-        id: item.id,
-        title,
-        description: `QR-код активен: ${location}`,
-        amount: benefit,
-        type: "qr",
-        date: item.createdAt,
-        status: item.status,
-        href: item.offer?.slug ? `/offer/${item.offer.slug}` : undefined,
-      };
-    }
-
-    return {
-      id: item.id,
-      title,
-      description: `Статус QR: ${item.status}`,
-      amount: benefit,
-      type: "qr",
-      date: item.createdAt,
-      status: item.status,
-      href: item.offer?.slug ? `/offer/${item.offer.slug}` : undefined,
-    };
-  });
-}
-
-function statusLabel(status: string): string {
+function transactionTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    created: "Создан",
-    confirmed: "Подтверждён",
-    used: "Использован",
-    expired: "Истёк",
-    cancelled: "Отменён",
+    earn: "Начисление",
+    spend: "Списание",
+    expire: "Истечение",
+    adjustment: "Корректировка",
+    refund: "Возврат",
   };
 
-  return labels[status] ?? status;
+  return labels[type] ?? type;
 }
 
-function statusClass(status: string): string {
-  if (status === "created" || status === "confirmed") {
+function sourceTypeLabel(sourceType: string): string {
+  const labels: Record<string, string> = {
+    redemption: "QR-использование",
+    referral: "Реферал",
+    admin: "Админ",
+    promotion: "Промо",
+    manual: "Ручная операция",
+  };
+
+  return labels[sourceType] ?? sourceType;
+}
+
+function transactionClass(type: string): string {
+  if (type === "earn" || type === "refund") {
     return "border-green-200 bg-green-50 text-green-700";
   }
 
-  if (status === "used") {
-    return "border-blue-200 bg-blue-50 text-blue-700";
-  }
-
-  if (status === "expired" || status === "cancelled") {
+  if (type === "spend" || type === "expire") {
     return "border-red-200 bg-red-50 text-red-700";
   }
 
-  return "border-[#E5ECE9] bg-[#F7F6F1] text-[#526470]";
+  return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
-function eventTypeLabel(type: WalletEvent["type"]): string {
-  const labels: Record<WalletEvent["type"], string> = {
-    bonus: "Бонус",
-    cashback: "Cashback",
-    discount: "Скидка",
-    qr: "QR",
-  };
+function formatPoints(value: number): string {
+  if (value > 0) {
+    return `+${value}`;
+  }
 
-  return labels[type];
+  return String(value);
 }
 
 function LoadingWallet(): JSX.Element {
@@ -187,7 +113,7 @@ function LoadingWallet(): JSX.Element {
   );
 }
 
-function EmptyWallet(): JSX.Element {
+function EmptyTransactions(): JSX.Element {
   return (
     <div className="ub-card rounded-[34px] p-8 text-center md:p-10">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-[#FFF0EB] text-2xl font-black text-[#FF7F6E]">
@@ -195,12 +121,12 @@ function EmptyWallet(): JSX.Element {
       </div>
 
       <h2 className="mt-5 text-2xl font-black text-[#17384B]">
-        Кошелёк пока пустой
+        Транзакций пока нет
       </h2>
 
       <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-[#6B7280]">
-        Когда ты начнёшь получать QR-коды, использовать скидки и копить бонусы,
-        история появится здесь.
+        Когда staff подтвердит QR-код, cashback или бонусы будут начислены в
+        кошелёк и появятся в истории.
       </p>
 
       <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
@@ -236,7 +162,7 @@ function ErrorWallet({ message }: { message: string }): JSX.Element {
   );
 }
 
-function StatCard({
+function HeroStatCard({
   label,
   value,
   description,
@@ -248,9 +174,11 @@ function StatCard({
   return (
     <div className="rounded-[24px] border border-white/15 bg-white/12 p-4 backdrop-blur-md">
       <p className="text-2xl font-black">{value}</p>
+
       <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[#DDE8EA]">
         {label}
       </p>
+
       <p className="mt-2 hidden text-xs leading-5 text-[#DDE8EA] lg:block">
         {description}
       </p>
@@ -258,94 +186,145 @@ function StatCard({
   );
 }
 
-function WalletEventCard({ event }: { event: WalletEvent }): JSX.Element {
-  const content = (
+function BalanceInfoRow({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  tone?: "default" | "success" | "danger";
+}): JSX.Element {
+  const valueClass =
+    tone === "success"
+      ? "text-green-700"
+      : tone === "danger"
+        ? "text-red-700"
+        : "text-[#17384B]";
+
+  return (
+    <div className="flex items-center justify-between rounded-[22px] bg-[#F9FAF8] px-4 py-3">
+      <span className="text-sm font-bold text-[#526470]">{label}</span>
+      <span className={`text-sm font-black ${valueClass}`}>{value}</span>
+    </div>
+  );
+}
+
+function TransactionCard({
+  transaction,
+}: {
+  transaction: WalletTransaction;
+}): JSX.Element {
+  return (
     <article className="rounded-[24px] border border-[#E5ECE9] bg-white p-4 transition hover:border-[#FFB5A4] hover:shadow-[0_14px_30px_rgba(15,23,42,0.06)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-[#FFF0EB] px-3 py-1 text-xs font-black text-[#FF7F6E]">
-              {eventTypeLabel(event.type)}
-            </span>
-
             <span
               className={[
                 "rounded-full border px-3 py-1 text-xs font-black",
-                statusClass(event.status),
+                transactionClass(transaction.type),
               ].join(" ")}
             >
-              {statusLabel(event.status)}
+              {transactionTypeLabel(transaction.type)}
+            </span>
+
+            <span className="rounded-full bg-[#FFF0EB] px-3 py-1 text-xs font-black text-[#FF7F6E]">
+              {sourceTypeLabel(transaction.sourceType)}
             </span>
           </div>
 
           <h3 className="mt-3 line-clamp-2 text-base font-black text-[#17384B]">
-            {event.title}
+            {transaction.comment ?? "Wallet transaction"}
           </h3>
 
           <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-            {event.description}
+            Баланс после операции:{" "}
+            <span className="font-black text-[#17384B]">
+              {transaction.balanceAfter}
+            </span>{" "}
+            баллов
           </p>
 
-          <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-[#9CA3AF]">
-            {formatDateTime(event.date)}
-          </p>
+          <div className="mt-3 grid gap-2 text-xs font-bold text-[#9CA3AF] sm:grid-cols-2">
+            <p>Создано: {formatDateTime(transaction.createdAt)}</p>
+            <p>Истекает: {formatDateTime(transaction.expiresAt)}</p>
+          </div>
+
+          {transaction.sourceId && (
+            <p className="mt-2 break-all font-mono text-xs text-[#9CA3AF]">
+              source: {transaction.sourceId}
+            </p>
+          )}
         </div>
 
         <div className="shrink-0 rounded-2xl bg-[#F7F6F1] px-4 py-3 text-right">
-          <p className="text-xl font-black text-[#17384B]">
-            {event.amount > 0 ? `+${event.amount}` : "—"}
+          <p
+            className={[
+              "text-xl font-black",
+              transaction.pointsDelta >= 0 ? "text-green-700" : "text-red-700",
+            ].join(" ")}
+          >
+            {formatPoints(transaction.pointsDelta)}
           </p>
 
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#6B7280]">
-            benefit
+            points
           </p>
         </div>
       </div>
     </article>
-  );
-
-  if (!event.href) {
-    return content;
-  }
-
-  return (
-    <Link href={event.href} className="block">
-      {content}
-    </Link>
   );
 }
 
 export default function WalletPage(): JSX.Element {
   const trpc = useTRPC();
 
-  const redemptionsQuery = useQuery(
-    trpc.redemptions.listMine.queryOptions({
+  const walletQuery = useQuery({
+    ...trpc.wallet.getMyWallet.queryOptions(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const transactionsQuery = useQuery({
+    ...trpc.wallet.getMyTransactions.queryOptions({
       limit: 50,
       offset: 0,
-    })
+    }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const wallet = walletQuery.data as WalletData | undefined;
+
+  const transactionsData = transactionsQuery.data as
+    | TransactionsData
+    | undefined;
+
+  const transactions = useMemo(
+    () => transactionsData?.items ?? [],
+    [transactionsData?.items]
   );
 
-  const items = useMemo(
-    () => (redemptionsQuery.data?.items ?? []) as RedemptionItem[],
-    [redemptionsQuery.data?.items]
-  );
-
-  const events = useMemo(() => getWalletEvents(items), [items]);
-
-  const activeQrCount = items.filter((item) => isActiveRedemption(item)).length;
-  const usedCount = items.filter((item) => item.status === "used").length;
-  const expiredCount = items.filter(
-    (item) => item.status === "expired" || item.status === "cancelled"
+  const earnCount = transactions.filter(
+    (transaction) => transaction.type === "earn"
   ).length;
 
-  const estimatedBenefits = events.reduce((sum, event) => sum + event.amount, 0);
+  const spendCount = transactions.filter(
+    (transaction) => transaction.type === "spend"
+  ).length;
 
-  const latestEvents = [...events].sort((a, b) => {
-    const first = a.date ? new Date(a.date).getTime() : 0;
-    const second = b.date ? new Date(b.date).getTime() : 0;
+  const latestTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => {
+      const first = new Date(a.createdAt).getTime();
+      const second = new Date(b.createdAt).getTime();
 
-    return second - first;
-  });
+      return second - first;
+    });
+  }, [transactions]);
+
+  const isLoading = walletQuery.isLoading || transactionsQuery.isLoading;
+  const error = walletQuery.error ?? transactionsQuery.error;
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1180px] flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
@@ -364,8 +343,8 @@ export default function WalletPage(): JSX.Element {
             </h1>
 
             <p className="mt-4 max-w-2xl text-base leading-8 text-[#DDE8EA]">
-              Здесь отображается твоя активность: полученные QR-коды,
-              использованные скидки и ориентировочная накопленная выгода.
+              Здесь отображается реальный баланс бонусов, lifetime-начисления,
+              списания и история wallet transactions после подтверждения QR.
             </p>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -386,33 +365,31 @@ export default function WalletPage(): JSX.Element {
           </div>
 
           <div className="grid grid-cols-3 gap-3 lg:grid-cols-1">
-            <StatCard
-              label="Активные"
-              value={activeQrCount}
-              description="QR-коды, которые можно показать партнёру."
+            <HeroStatCard
+              label="Баланс"
+              value={wallet?.availableBalance ?? 0}
+              description="Доступные бонусные баллы."
             />
 
-            <StatCard
-              label="Использованы"
-              value={usedCount}
-              description="Скидки, которые уже были применены."
+            <HeroStatCard
+              label="Earned"
+              value={wallet?.lifetimeEarned ?? 0}
+              description="Всего начислено за всё время."
             />
 
-            <StatCard
-              label="Истекли"
-              value={expiredCount}
-              description="Неактивные или отменённые QR-коды."
+            <HeroStatCard
+              label="Spent"
+              value={wallet?.lifetimeSpent ?? 0}
+              description="Всего списано за всё время."
             />
           </div>
         </div>
       </section>
 
-      {redemptionsQuery.isLoading ? (
+      {isLoading ? (
         <LoadingWallet />
-      ) : redemptionsQuery.error ? (
-        <ErrorWallet message={redemptionsQuery.error.message} />
-      ) : events.length === 0 ? (
-        <EmptyWallet />
+      ) : error ? (
+        <ErrorWallet message={error.message} />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
           <section className="ub-animate-fade-up ub-card rounded-[34px] p-6 md:p-7">
@@ -421,61 +398,61 @@ export default function WalletPage(): JSX.Element {
             </p>
 
             <h2 className="mt-1 text-2xl font-black text-[#17384B]">
-              Баланс активности
+              Реальный баланс
             </h2>
 
             <div className="mt-6 rounded-[30px] bg-[linear-gradient(135deg,#17384B_0%,#255B73_60%,#FF9F8A_140%)] p-6 text-white shadow-[0_20px_50px_rgba(23,56,75,0.2)]">
               <p className="text-sm font-black uppercase tracking-[0.2em] text-[#FFB5A4]">
-                Ориентировочная выгода
+                Available balance
               </p>
 
-              <p className="mt-3 text-5xl font-black">{estimatedBenefits}</p>
+              <p className="mt-3 text-5xl font-black">
+                {wallet?.availableBalance ?? 0}
+              </p>
 
               <p className="mt-3 text-sm leading-6 text-[#DDE8EA]">
-                Значение рассчитывается по данным QR и скидок. Для точного
-                бонусного баланса позже можно добавить отдельный backend-модуль
-                wallet.
+                Баллы начисляются только после того, как staff подтверждает
+                QR-код скидки.
               </p>
             </div>
 
             <div className="mt-6 grid gap-3">
-              <div className="flex items-center justify-between rounded-[22px] bg-[#F9FAF8] px-4 py-3">
-                <span className="text-sm font-bold text-[#526470]">
-                  Всего операций
-                </span>
-                <span className="text-sm font-black text-[#17384B]">
-                  {events.length}
-                </span>
-              </div>
+              <BalanceInfoRow
+                label="Всего начислено"
+                value={wallet?.lifetimeEarned ?? 0}
+                tone="success"
+              />
 
-              <div className="flex items-center justify-between rounded-[22px] bg-[#F9FAF8] px-4 py-3">
-                <span className="text-sm font-bold text-[#526470]">
-                  Активные QR
-                </span>
-                <span className="text-sm font-black text-green-700">
-                  {activeQrCount}
-                </span>
-              </div>
+              <BalanceInfoRow
+                label="Всего списано"
+                value={wallet?.lifetimeSpent ?? 0}
+                tone="danger"
+              />
 
-              <div className="flex items-center justify-between rounded-[22px] bg-[#F9FAF8] px-4 py-3">
-                <span className="text-sm font-bold text-[#526470]">
-                  Использованные
-                </span>
-                <span className="text-sm font-black text-blue-700">
-                  {usedCount}
-                </span>
-              </div>
+              <BalanceInfoRow
+                label="Транзакций"
+                value={transactionsData?.total ?? 0}
+              />
+
+              <BalanceInfoRow label="Earn operations" value={earnCount} />
+
+              <BalanceInfoRow label="Spend operations" value={spendCount} />
+
+              <BalanceInfoRow
+                label="Обновлено"
+                value={formatDateTime(wallet?.updatedAt)}
+              />
             </div>
 
             <div className="mt-6 rounded-[26px] border border-[#FFE0D8] bg-[#FFF7F4] p-5">
               <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FF7F6E]">
-                Следующий backend-этап
+                Wallet logic
               </p>
 
               <p className="mt-2 text-sm leading-7 text-[#8A4B3F]">
-                Позже можно добавить настоящие таблицы wallet_transactions,
-                bonus_balance и cashback_history. Сейчас страница показывает
-                frontend-кошелёк на основе истории QR.
+                QR created не меняет кошелёк. QR confirmed создаёт одну earn
+                transaction. Повторное подтверждение не должно начислять баллы
+                второй раз.
               </p>
             </div>
           </section>
@@ -484,26 +461,38 @@ export default function WalletPage(): JSX.Element {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
-                  History
+                  Transactions
                 </p>
 
                 <h2 className="mt-1 text-2xl font-black text-[#17384B]">
-                  История операций
+                  История кошелька
                 </h2>
+
+                <p className="mt-2 text-sm leading-6 text-[#6B7280]">
+                  Показано: {latestTransactions.length} из{" "}
+                  {transactionsData?.total ?? 0}
+                </p>
               </div>
 
               <Link
                 href="/my-redemptions"
                 className="text-sm font-black text-[#FF7F6E]"
               >
-                Все QR →
+                Мои QR →
               </Link>
             </div>
 
             <div className="mt-6 grid gap-3">
-              {latestEvents.map((event) => (
-                <WalletEventCard key={event.id} event={event} />
-              ))}
+              {latestTransactions.length === 0 ? (
+                <EmptyTransactions />
+              ) : (
+                latestTransactions.map((transaction) => (
+                  <TransactionCard
+                    key={transaction.id}
+                    transaction={transaction}
+                  />
+                ))
+              )}
             </div>
           </section>
         </div>
