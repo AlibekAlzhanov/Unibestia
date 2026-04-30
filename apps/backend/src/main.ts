@@ -1,91 +1,106 @@
 import "reflect-metadata";
-import { NestFactory } from "@nestjs/core";
-import { AppModule } from "./app.module.js";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { TRPCService } from "@repo/trpc";
 import * as os from "os";
+import { AppModule } from "./app.module.js";
+
+function parseCorsOrigins(value: string | undefined): string[] {
+  const fallbackOrigins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
+  ];
+
+  if (!value?.trim()) {
+    return fallbackOrigins;
+  }
+
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return origins.length > 0 ? origins : fallbackOrigins;
+}
+
+function getLocalIpAddress(): string {
+  const networkInterfaces = os.networkInterfaces();
+
+  for (const interfaces of Object.values(networkInterfaces)) {
+    if (!interfaces) {
+      continue;
+    }
+
+    for (const item of interfaces) {
+      if (item.family === "IPv4" && !item.internal) {
+        return item.address;
+      }
+    }
+  }
+
+  return "localhost";
+}
 
 async function bootstrap() {
-  // Create the application with minimal logging in production
+  const isProduction = process.env.NODE_ENV === "production";
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger:
-      process.env.NODE_ENV === "production"
-        ? ["error", "warn"]
-        : ["error", "warn", "log", "debug", "verbose"],
-    // Improve startup performance
-    abortOnError: false,
+    logger: isProduction
+      ? ["error", "warn"]
+      : ["error", "warn", "log", "debug", "verbose"],
+    abortOnError: isProduction,
     bufferLogs: true,
   });
 
   const logger = new Logger("Bootstrap");
-
-  // Get ConfigService instance
   const configService = app.get(ConfigService);
 
-  // Enable ValidationPipe globally with performance optimizations
+  const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
+  const port = configService.getOrThrow<number>("PORT");
+  const corsOrigins = parseCorsOrigins(
+    configService.get<string>("CORS_ORIGINS")
+  );
+
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
       whitelist: true,
-      forbidNonWhitelisted: false,
+      forbidNonWhitelisted: true,
     })
   );
 
-  // Configure CORS.
-  // Client Web runs on :3000, Business Web runs on :3002, Backend runs on :3001.
   app.enableCors({
-    origin: [
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-
-      "http://localhost:3001",
-      "http://127.0.0.1:3001",
-
-      "http://localhost:3002",
-      "http://127.0.0.1:3002",
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    origin: corsOrigins,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     credentials: true,
   });
 
-  // Apply tRPC middleware
   const trpcService = app.get(TRPCService);
   trpcService.applyMiddleware(app);
 
-  // Use getOrThrow - it expects the value to be defined
-  // due to the validation schema having defaults.
-  const port = configService.getOrThrow<number>("PORT");
-
-  // Get local IP address
-  let localIp = "localhost";
-  const networkInterfaces = os.networkInterfaces();
-
-  // Find the first non-internal IPv4 address
-  Object.keys(networkInterfaces).forEach((interfaceName) => {
-    const interfaces = networkInterfaces[interfaceName];
-    if (interfaces) {
-      for (const iface of interfaces) {
-        if (iface.family === "IPv4" && !iface.internal) {
-          localIp = iface.address;
-          return; // Exit the inner loop once found
-        }
-      }
-    }
-  });
-
   await app.listen(port, "0.0.0.0");
 
-  logger.log(
-    `🚀 Application is running on: http://localhost:${port}/ and http://${localIp}:${port}/`
-  );
-  logger.log(`tRPC Panel available at: http://localhost:${port}/panel`);
+  const localIp = getLocalIpAddress();
+
+  logger.log(`Application is running on http://localhost:${port}`);
+
+  if (nodeEnv !== "production") {
+    logger.log(`Local network URL: http://${localIp}:${port}`);
+    logger.log(`tRPC panel: http://localhost:${port}/panel`);
+    logger.log(`Allowed CORS origins: ${corsOrigins.join(", ")}`);
+  }
 }
 
 bootstrap().catch((error) => {
-  Logger.error("Failed to bootstrap application:", error);
-  // Note: process.exit(1) is removed as it might not be available in all environments
-  // Consider more robust error handling or logging if needed.
+  Logger.error(
+    "Failed to bootstrap application",
+    error instanceof Error ? error.stack : String(error)
+  );
 });
