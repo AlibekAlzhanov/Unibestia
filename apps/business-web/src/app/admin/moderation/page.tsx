@@ -9,136 +9,294 @@ function QueueCard({
   title,
   count,
   href,
+  badge,
+  description,
   children,
 }: {
   title: string;
   count: number;
   href: string;
+  badge: string;
+  description: string;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <section className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-      <div className="flex items-center justify-between gap-3">
+    <section className="ub-card ub-animate-fade-up rounded-[34px] p-6 md:p-7">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-[#17384B]">{title}</h2>
-          <p className="mt-1 text-sm text-[#6B7280]">Ожидает: {count}</p>
+          <span className="rounded-2xl bg-[#FFF0EB] px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-[#FF7F6E]">
+            {badge}
+          </span>
+
+          <h2 className="mt-5 text-2xl font-black text-[#17384B]">{title}</h2>
+
+          <p className="mt-2 text-sm leading-7 text-[#6B7280]">
+            {description}
+          </p>
         </div>
-        <Link
-          href={href}
-          className="rounded-2xl bg-[#FF9F8A] px-4 py-2 text-sm font-bold text-white"
-        >
-          Открыть
-        </Link>
+
+        <div className="shrink-0 rounded-[24px] bg-[#F9FAF8] px-5 py-4 text-center">
+          <p className="text-3xl font-black text-[#17384B]">{count}</p>
+          <p className="mt-1 text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
+            pending
+          </p>
+        </div>
       </div>
 
-      <div className="mt-5 space-y-3">{children}</div>
+      <div className="mt-6 grid gap-3">{children}</div>
+
+      <Link
+        href={href}
+        className="mt-6 inline-flex w-full justify-center rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-black text-white transition hover:bg-[#255B73]"
+      >
+        Открыть раздел →
+      </Link>
+    </section>
+  );
+}
+
+function EmptyItem({ text }: { text: string }): JSX.Element {
+  return (
+    <div className="rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5 text-sm leading-7 text-[#6B7280]">
+      {text}
+    </div>
+  );
+}
+
+function QueueItem({
+  title,
+  subtitle,
+  tag,
+}: {
+  title: string;
+  subtitle: string;
+  tag: string;
+}): JSX.Element {
+  return (
+    <article className="rounded-[24px] border border-[#E5ECE9] bg-white p-4 transition hover:border-[#FFB5A4] hover:shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="line-clamp-1 font-black text-[#17384B]">{title}</p>
+
+          <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#6B7280]">
+            {subtitle}
+          </p>
+        </div>
+
+        <span className="w-fit shrink-0 rounded-2xl border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs font-black text-yellow-700">
+          {tag}
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function LoadingModeration(): JSX.Element {
+  return (
+    <section className="grid gap-4 lg:grid-cols-3">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="ub-card rounded-[34px] p-6">
+          <div className="ub-skeleton h-8 w-28 rounded-full" />
+          <div className="ub-skeleton mt-5 h-7 w-44 rounded-full" />
+          <div className="ub-skeleton mt-4 h-4 w-full rounded-full" />
+          <div className="ub-skeleton mt-3 h-4 w-3/4 rounded-full" />
+
+          <div className="mt-6 grid gap-3">
+            <div className="ub-skeleton h-20 rounded-2xl" />
+            <div className="ub-skeleton h-20 rounded-2xl" />
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
 
 export default function AdminModerationPage(): JSX.Element {
   const trpc = useTRPC();
-  const queueQuery = useQuery(
-    trpc.business.admin.getModerationQueue.queryOptions()
-  );
+
+  const queueQuery = useQuery({
+    ...trpc.business.admin.getModerationQueue.queryOptions(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
 
   const data = queueQuery.data;
 
+  const pendingPartners = data?.counts.pendingPartners ?? 0;
+  const pendingOffers = data?.counts.pendingOffers ?? 0;
+  const pendingVerifications = data?.counts.pendingVerifications ?? 0;
+  const totalPending = pendingPartners + pendingOffers + pendingVerifications;
+
   return (
-    <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1280px] px-4 py-10 md:px-6 lg:px-8">
-      <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
-          Admin / Moderation
-        </p>
-        <h1 className="mt-2 text-3xl font-black text-[#17384B]">
-          Центр модерации
-        </h1>
-        <p className="mt-3 max-w-3xl text-[#6B7280]">
-          Единое место для pending-заявок: партнёры, офферы и студенческие
-          верификации.
-        </p>
+    <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
+      <section className="ub-animate-fade-up relative overflow-hidden rounded-[36px] bg-[linear-gradient(135deg,#17384B_0%,#255B73_52%,#FF9F8A_130%)] p-6 text-white shadow-[0_24px_70px_rgba(23,56,75,0.24)] md:p-10">
+        <div className="absolute left-0 top-0 h-52 w-52 rounded-full bg-[#A6EFEE]/20 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-64 w-64 rounded-full bg-[#FF9F8A]/24 blur-3xl" />
+
+        <div className="relative grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div>
+            <p className="mb-3 text-sm font-black uppercase tracking-[0.24em] text-[#FFB5A4]">
+              Admin / Moderation
+            </p>
+
+            <h1 className="max-w-3xl text-[34px] font-black leading-tight tracking-[-0.04em] md:text-5xl">
+              Центр модерации
+            </h1>
+
+            <p className="mt-4 max-w-2xl text-base leading-8 text-[#DDE8EA]">
+              Единый экран для проверки pending-заявок: партнёры, офферы и
+              студенческие PDF-верификации. Этот раздел показывает контрольный
+              workflow платформы.
+            </p>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Link
+                href="/admin/partners"
+                className="ub-gradient-button rounded-2xl px-5 py-3 text-center text-sm font-black text-white"
+              >
+                Партнёры
+              </Link>
+
+              <Link
+                href="/admin/offers"
+                className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-center text-sm font-black text-white transition hover:bg-white/15"
+              >
+                Офферы
+              </Link>
+
+              <Link
+                href="/admin/verifications"
+                className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-center text-sm font-black text-white transition hover:bg-white/15"
+              >
+                Студенты
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 lg:grid-cols-1">
+            <div className="rounded-[24px] border border-white/15 bg-white/12 p-4 backdrop-blur-md">
+              <p className="text-2xl font-black">{totalPending}</p>
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[#DDE8EA]">
+                Всего
+              </p>
+            </div>
+
+            <div className="rounded-[24px] border border-white/15 bg-white/12 p-4 backdrop-blur-md">
+              <p className="text-2xl font-black">{pendingOffers}</p>
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[#DDE8EA]">
+                Offers
+              </p>
+            </div>
+
+            <div className="rounded-[24px] border border-white/15 bg-white/12 p-4 backdrop-blur-md">
+              <p className="text-2xl font-black">{pendingVerifications}</p>
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[#DDE8EA]">
+                Students
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <article className="ub-card rounded-[28px] p-5">
+          <p className="text-sm font-bold text-[#6B7280]">Pending partners</p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {pendingPartners}
+          </p>
+        </article>
+
+        <article className="ub-card rounded-[28px] p-5">
+          <p className="text-sm font-bold text-[#6B7280]">Pending offers</p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {pendingOffers}
+          </p>
+        </article>
+
+        <article className="ub-card rounded-[28px] p-5">
+          <p className="text-sm font-bold text-[#6B7280]">
+            Pending verifications
+          </p>
+          <p className="mt-2 text-3xl font-black text-[#17384B]">
+            {pendingVerifications}
+          </p>
+        </article>
       </section>
 
       {queueQuery.error && (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+        <div className="rounded-[28px] border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">
           Не удалось загрузить очередь: {queueQuery.error.message}
         </div>
       )}
 
-      {queueQuery.isLoading ? (
-        <div className="mt-6 rounded-[28px] bg-white p-6 text-[#6B7280]">
-          Загружаем очередь модерации...
-        </div>
+      {queueQuery.isLoading && !data ? (
+        <LoadingModeration />
       ) : (
-        <section className="mt-6 grid gap-4 lg:grid-cols-3">
+        <section className="grid gap-4 lg:grid-cols-3">
           <QueueCard
             title="Партнёры"
-            count={data?.counts.pendingPartners ?? 0}
+            count={pendingPartners}
             href="/admin/partners"
+            badge="Partners"
+            description="Компании, которые ожидают решения администратора."
           >
             {(data?.pendingPartners ?? []).length === 0 ? (
-              <p className="text-sm text-[#6B7280]">Нет pending-партнёров.</p>
+              <EmptyItem text="Нет pending-партнёров." />
             ) : (
               (data?.pendingPartners ?? []).map((partner) => (
-                <div
+                <QueueItem
                   key={partner.id}
-                  className="rounded-2xl border border-[#E5ECE9] p-4"
-                >
-                  <p className="font-bold text-[#17384B]">
-                    {partner.brandName}
-                  </p>
-                  <p className="mt-1 text-sm text-[#6B7280]">
-                    {partner.legalName} · {partner.contactEmail}
-                  </p>
-                </div>
+                  title={partner.brandName}
+                  subtitle={`${partner.legalName} · ${partner.contactEmail}`}
+                  tag="review"
+                />
               ))
             )}
           </QueueCard>
 
           <QueueCard
             title="Офферы"
-            count={data?.counts.pendingOffers ?? 0}
+            count={pendingOffers}
             href="/admin/offers"
+            badge="Offers"
+            description="Скидки, отправленные партнёрами на публикацию."
           >
             {(data?.pendingOffers ?? []).length === 0 ? (
-              <p className="text-sm text-[#6B7280]">Нет pending-офферов.</p>
+              <EmptyItem text="Нет pending-офферов." />
             ) : (
               (data?.pendingOffers ?? []).map((offer) => (
-                <div
+                <QueueItem
                   key={offer.id}
-                  className="rounded-2xl border border-[#E5ECE9] p-4"
-                >
-                  <p className="font-bold text-[#17384B]">{offer.title}</p>
-                  <p className="mt-1 text-sm text-[#6B7280]">
-                    {offer.partner?.brandName ?? "—"} · {offer.status}
-                  </p>
-                </div>
+                  title={offer.title}
+                  subtitle={`${offer.partner?.brandName ?? "—"} · ${offer.status}`}
+                  tag="pending"
+                />
               ))
             )}
           </QueueCard>
 
           <QueueCard
             title="Студенты"
-            count={data?.counts.pendingVerifications ?? 0}
+            count={pendingVerifications}
             href="/admin/verifications"
+            badge="Students"
+            description="PDF-заявки на подтверждение студенческого статуса."
           >
             {(data?.pendingVerifications ?? []).length === 0 ? (
-              <p className="text-sm text-[#6B7280]">
-                Нет pending-верификаций.
-              </p>
+              <EmptyItem text="Нет pending-верификаций." />
             ) : (
               (data?.pendingVerifications ?? []).map((verification) => (
-                <div
+                <QueueItem
                   key={verification.id}
-                  className="rounded-2xl border border-[#E5ECE9] p-4"
-                >
-                  <p className="font-bold text-[#17384B]">
-                    {verification.user?.email ?? verification.submittedEmail}
-                  </p>
-                  <p className="mt-1 text-sm text-[#6B7280]">
-                    {verification.method} · {verification.status}
-                  </p>
-                </div>
+                  title={
+                    verification.user?.email ??
+                    verification.submittedEmail ??
+                    "Студент"
+                  }
+                  subtitle={`${verification.method} · ${verification.status}`}
+                  tag="verify"
+                />
               ))
             )}
           </QueueCard>

@@ -15,7 +15,6 @@ function parseOptionalNumber(value: string): number | undefined {
   }
 
   const parsed = Number(value);
-
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
@@ -30,11 +29,15 @@ function toIsoOrUndefined(value: string): string | undefined {
 
 function fieldClass(isEnabled: boolean): string {
   return [
-    "mt-2 h-12 w-full rounded-2xl border px-4 text-sm outline-none transition",
+    "mt-2 h-12 w-full rounded-2xl border px-4 text-sm font-semibold outline-none transition",
     isEnabled
-      ? "border-[#D8E3DE] bg-[#F9FAF8] text-[#17384B] focus:border-[#FF9F8A]"
+      ? "border-[#D8E3DE] bg-[#F9FAF8] text-[#17384B] placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
       : "cursor-not-allowed border-[#E5E7EB] bg-[#F3F4F6] text-[#9CA3AF]",
   ].join(" ");
+}
+
+function textAreaClass(): string {
+  return "mt-2 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-3 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]";
 }
 
 function helperTextClass(isEnabled: boolean): string {
@@ -44,15 +47,109 @@ function helperTextClass(isEnabled: boolean): string {
   ].join(" ");
 }
 
+function benefitLabel(value: BenefitType): string {
+  const labels: Record<BenefitType, string> = {
+    discount: "Скидка",
+    cashback: "Cashback",
+    bonus: "Бонусы",
+    mixed: "Mixed",
+  };
+
+  return labels[value];
+}
+
+function benefitDescription(value: BenefitType): string {
+  const descriptions: Record<BenefitType, string> = {
+    discount: "Классическая скидка в процентах или фиксированной сумме.",
+    cashback: "Возврат части суммы студенту в виде cashback-предложения.",
+    bonus: "Начисление бонусных баллов за использование предложения.",
+    mixed: "Комбинированная выгода: скидка, cashback и/или бонусы вместе.",
+  };
+
+  return descriptions[value];
+}
+
+function discountTypeLabel(value: DiscountType): string {
+  const labels: Record<DiscountType, string> = {
+    percent: "Процент",
+    fixed_amount: "Фиксированная сумма",
+  };
+
+  return labels[value];
+}
+
+function discountTypeDescription(value: DiscountType): string {
+  if (value === "percent") {
+    return "Например: 15 означает скидку 15%.";
+  }
+
+  return "Например: 1000 означает скидку 1000 ₸.";
+}
+
+function generatePreviewTitle(title: string): string {
+  return title.trim() || "Название скидки";
+}
+
+function generatePreviewDescription(shortDescription: string): string {
+  return (
+    shortDescription.trim() ||
+    "Короткое описание будет отображаться в карточке каталога."
+  );
+}
+
+function formatBenefitPreview({
+  benefitType,
+  discountType,
+  discountValue,
+  cashbackPercent,
+  bonusRewardPoints,
+}: {
+  benefitType: BenefitType;
+  discountType: DiscountType;
+  discountValue: string;
+  cashbackPercent: string;
+  bonusRewardPoints: string;
+}): string {
+  const parts: string[] = [];
+
+  if ((benefitType === "discount" || benefitType === "mixed") && discountValue) {
+    parts.push(
+      discountType === "percent"
+        ? `-${Number(discountValue).toFixed(0)}%`
+        : `-${Number(discountValue).toFixed(0)} ₸`
+    );
+  }
+
+  if (
+    (benefitType === "cashback" || benefitType === "mixed") &&
+    cashbackPercent
+  ) {
+    parts.push(`${Number(cashbackPercent).toFixed(0)}% cashback`);
+  }
+
+  if (
+    (benefitType === "bonus" || benefitType === "mixed") &&
+    bonusRewardPoints
+  ) {
+    parts.push(`+${Number(bonusRewardPoints).toFixed(0)} бонусов`);
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : benefitLabel(benefitType);
+}
+
 export default function NewPartnerOfferPage(): JSX.Element {
   const router = useRouter();
   const trpc = useTRPC();
   const trpcClient = useTRPCClient();
 
   const categoriesQuery = useQuery(trpc.catalog.listCategories.queryOptions());
-  const locationsQuery = useQuery(
-    trpc.business.partner.listLocations.queryOptions()
-  );
+
+  const locationsQuery = useQuery({
+    ...trpc.business.partner.listLocations.queryOptions(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
 
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -134,9 +231,9 @@ export default function NewPartnerOfferPage(): JSX.Element {
     try {
       const created = await trpcClient.business.partner.createOffer.mutate({
         categoryId: selectedCategoryId,
-        title,
+        title: title.trim(),
         shortDescription: shortDescription.trim() || undefined,
-        description,
+        description: description.trim(),
         terms: terms.trim() || undefined,
         benefitType,
         discountType,
@@ -174,217 +271,409 @@ export default function NewPartnerOfferPage(): JSX.Element {
     }
   }
 
-  return (
-    <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[980px] px-4 py-10 md:px-6 lg:px-8">
-      <Link href="/partner/offers" className="mb-5 inline-flex text-sm font-bold text-[#FF7F6E]">
-        ← Назад к скидкам
-      </Link>
+  const previewBenefit = formatBenefitPreview({
+    benefitType,
+    discountType,
+    discountValue,
+    cashbackPercent,
+    bonusRewardPoints,
+  });
 
-      <section className="rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9CA3AF]">
-          Partner / Offers / New
-        </p>
-        <h1 className="mt-2 text-3xl font-black text-[#17384B]">
-          Создать скидку
-        </h1>
-        <p className="mt-3 max-w-2xl text-[#6B7280]">
-          Поля выгоды зависят от выбранного типа: скидка, cashback, бонусы или
-          смешанное предложение.
-        </p>
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
+      <section className="ub-animate-fade-up relative overflow-hidden rounded-[36px] bg-[linear-gradient(135deg,#17384B_0%,#255B73_52%,#FF9F8A_130%)] p-6 text-white shadow-[0_24px_70px_rgba(23,56,75,0.24)] md:p-10">
+        <div className="absolute left-0 top-0 h-52 w-52 rounded-full bg-[#A6EFEE]/20 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-64 w-64 rounded-full bg-[#FF9F8A]/24 blur-3xl" />
+
+        <div className="relative grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div>
+            <Link
+              href="/partner/offers"
+              className="mb-5 inline-flex rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-black text-white transition hover:bg-white/15"
+            >
+              ← Назад к скидкам
+            </Link>
+
+            <p className="mb-3 text-sm font-black uppercase tracking-[0.24em] text-[#FFB5A4]">
+              Partner / Offers / New
+            </p>
+
+            <h1 className="max-w-3xl text-[34px] font-black leading-tight tracking-[-0.04em] md:text-5xl">
+              Создать скидку
+            </h1>
+
+            <p className="mt-4 max-w-2xl text-base leading-8 text-[#DDE8EA]">
+              Заполните условия, выберите точки действия, тип выгоды и решите,
+              отправлять ли оффер сразу на модерацию или сохранить как черновик.
+            </p>
+          </div>
+
+          <div className="rounded-[28px] border border-white/15 bg-white/12 p-5 backdrop-blur-md">
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFB5A4]">
+              Preview
+            </p>
+
+            <p className="mt-2 line-clamp-2 text-2xl font-black">
+              {generatePreviewTitle(title)}
+            </p>
+
+            <p className="mt-2 rounded-2xl bg-white/10 px-3 py-2 text-sm font-black text-[#FFB5A4]">
+              {previewBenefit}
+            </p>
+
+            <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#DDE8EA]">
+              {generatePreviewDescription(shortDescription)}
+            </p>
+          </div>
+        </div>
       </section>
 
       <form
         onSubmit={handleSubmit}
-        className="mt-6 rounded-[32px] bg-white p-7 shadow-[0_16px_32px_rgba(15,23,42,0.05)]"
+        className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start"
       >
-        <div className="grid gap-5">
-          <label>
-            <span className="text-sm font-bold text-[#17384B]">Название</span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              required
-              minLength={3}
-              maxLength={255}
-              placeholder="Например: Скидка 20% на бургеры"
-              className={fieldClass(true)}
-            />
-          </label>
+        <div className="grid min-w-0 gap-6">
+          <section className="ub-animate-fade-up ub-card rounded-[34px] p-6 md:p-7">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+              Основная информация
+            </p>
 
-          <label>
-            <span className="text-sm font-bold text-[#17384B]">
-              Короткое описание
-            </span>
-            <input
-              value={shortDescription}
-              onChange={(event) => setShortDescription(event.target.value)}
-              maxLength={500}
-              placeholder="Кратко для карточки каталога"
-              className={fieldClass(true)}
-            />
-          </label>
+            <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+              Карточка предложения
+            </h2>
 
-          <label>
-            <span className="text-sm font-bold text-[#17384B]">Категория</span>
-            <select
-              value={selectedCategoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-              required
-              className={fieldClass(true)}
-            >
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <div className="mt-6 grid gap-5">
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Название *
+                </span>
 
-          <section className="rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={255}
+                  placeholder="Например: Скидка 20% на бургеры"
+                  className={fieldClass(true)}
+                />
+              </label>
+
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Короткое описание
+                </span>
+
+                <input
+                  value={shortDescription}
+                  onChange={(event) => setShortDescription(event.target.value)}
+                  maxLength={500}
+                  placeholder="Кратко для карточки каталога"
+                  className={fieldClass(true)}
+                />
+              </label>
+
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
-                  Точки действия
-                </p>
-                <p className="mt-1 text-sm text-[#6B7280]">
-                  Выбери, в каких точках будет действовать скидка.
-                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <span className="text-sm font-black text-[#17384B]">
+                      Категория *
+                    </span>
+
+                    <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                      Выберите раздел каталога, в котором будет отображаться
+                      скидка.
+                    </p>
+                  </div>
+
+                  {selectedCategoryId && (
+                    <span className="w-fit rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-black text-[#FF7F6E]">
+                      Выбрано
+                    </span>
+                  )}
+                </div>
+
+                {categoriesQuery.isLoading ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="ub-skeleton h-[82px] rounded-[22px]"
+                      />
+                    ))}
+                  </div>
+                ) : categories.length === 0 ? (
+                  <div className="mt-3 rounded-[22px] border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
+                    Категории не найдены. Сначала добавьте категории в админке:
+                    <Link
+                      href="/admin/categories"
+                      className="ml-1 font-black underline underline-offset-4"
+                    >
+                      открыть категории
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {categories.map((category) => {
+                      const isSelected = selectedCategoryId === category.id;
+
+                      return (
+                        <button
+                          key={category.id}
+                          type="button"
+                          onClick={() => setCategoryId(category.id)}
+                          className={[
+                            "group rounded-[22px] border p-4 text-left transition",
+                            isSelected
+                              ? "border-[#FFB5A4] bg-[#FFF7F4] shadow-[0_14px_30px_rgba(255,127,110,0.12)]"
+                              : "border-[#E5ECE9] bg-white hover:border-[#FFB5A4] hover:bg-[#FFFDFB]",
+                          ].join(" ")}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p
+                                className={[
+                                  "line-clamp-1 text-sm font-black",
+                                  isSelected
+                                    ? "text-[#FF7F6E]"
+                                    : "text-[#17384B]",
+                                ].join(" ")}
+                              >
+                                {category.name}
+                              </p>
+
+                              <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                                Категория каталога скидок
+                              </p>
+                            </div>
+
+                            <span
+                              className={[
+                                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-black transition",
+                                isSelected
+                                  ? "border-[#FF7F6E] bg-[#FF7F6E] text-white"
+                                  : "border-[#D8E3DE] bg-white text-transparent group-hover:border-[#FFB5A4]",
+                              ].join(" ")}
+                            >
+                              ✓
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
+
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Описание *
+                </span>
+
+                <textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  required
+                  minLength={10}
+                  rows={5}
+                  placeholder="Полное описание предложения"
+                  className={textAreaClass()}
+                />
+              </label>
+
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Условия
+                </span>
+
+                <textarea
+                  value={terms}
+                  onChange={(event) => setTerms(event.target.value)}
+                  rows={4}
+                  placeholder="Например: действует только при предъявлении студенческого QR"
+                  className={textAreaClass()}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="ub-animate-fade-up ub-card rounded-[34px] p-6 md:p-7">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+              Точки действия
+            </p>
+
+            <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+              Где будет действовать скидка
+            </h2>
+
+            <div className="mt-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+              <p className="text-sm leading-7 text-[#6B7280]">
+                Выберите точки продаж. Если точек нет, сначала создайте их в
+                разделе “Точки продаж”.
+              </p>
 
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={selectAllLocations}
-                  className="rounded-2xl border border-[#D8E3DE] bg-white px-3 py-2 text-xs font-bold text-[#17384B]"
+                  className="rounded-2xl border border-[#D8E3DE] bg-white px-4 py-2 text-xs font-black text-[#17384B] transition hover:bg-[#F7F6F1]"
                 >
                   Все
                 </button>
+
                 <button
                   type="button"
                   onClick={clearLocations}
-                  className="rounded-2xl border border-[#D8E3DE] bg-white px-3 py-2 text-xs font-bold text-[#526470]"
+                  className="rounded-2xl border border-[#D8E3DE] bg-white px-4 py-2 text-xs font-black text-[#526470] transition hover:bg-[#F7F6F1]"
                 >
                   Очистить
                 </button>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3">
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {locationsQuery.isLoading ? (
-                <p className="text-sm text-[#6B7280]">Загружаем точки...</p>
+                <div className="rounded-2xl bg-[#F9FAF8] p-5 text-sm text-[#6B7280]">
+                  Загружаем точки...
+                </div>
               ) : locations.length === 0 ? (
-                <p className="text-sm text-[#6B7280]">
+                <div className="rounded-2xl bg-[#F9FAF8] p-5 text-sm leading-7 text-[#6B7280]">
                   У партнёра пока нет точек. Сначала добавь точку в разделе
                   “Точки продаж”.
-                </p>
+                </div>
               ) : (
-                locations.map((location) => (
-                  <label
-                    key={location.id}
-                    className="flex items-start gap-3 rounded-2xl border border-[#E5ECE9] bg-white p-4"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedLocationIds.includes(location.id)}
-                      onChange={() => toggleLocation(location.id)}
-                      className="mt-1"
-                    />
-                    <span>
-                      <span className="block text-sm font-bold text-[#17384B]">
-                        {location.name}
-                      </span>
-                      <span className="mt-1 block text-sm text-[#6B7280]">
-                        {[location.city, location.address].filter(Boolean).join(", ")}
-                      </span>
-                    </span>
-                  </label>
-                ))
+                locations.map((location) => {
+                  const isSelected = selectedLocationIds.includes(location.id);
+
+                  return (
+                    <label
+                      key={location.id}
+                      className={[
+                        "cursor-pointer rounded-[24px] border p-4 transition",
+                        isSelected
+                          ? "border-[#FFB5A4] bg-[#FFF7F4]"
+                          : "border-[#E5ECE9] bg-white hover:border-[#FFB5A4]",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleLocation(location.id)}
+                          className="mt-1"
+                        />
+
+                        <span>
+                          <span className="block text-sm font-black text-[#17384B]">
+                            {location.name}
+                          </span>
+
+                          <span className="mt-1 block text-sm leading-6 text-[#6B7280]">
+                            {[location.city, location.address]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })
               )}
             </div>
           </section>
 
-          <label>
-            <span className="text-sm font-bold text-[#17384B]">Описание</span>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              required
-              minLength={10}
-              rows={5}
-              placeholder="Полное описание предложения"
-              className="mt-2 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-3 text-sm outline-none focus:border-[#FF9F8A]"
-            />
-          </label>
-
-          <label>
-            <span className="text-sm font-bold text-[#17384B]">Условия</span>
-            <textarea
-              value={terms}
-              onChange={(event) => setTerms(event.target.value)}
-              rows={4}
-              placeholder="Например: действует только при предъявлении студенческого QR"
-              className="mt-2 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-3 text-sm outline-none focus:border-[#FF9F8A]"
-            />
-          </label>
-
-          <div className="rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
+          <section className="ub-animate-fade-up ub-card rounded-[34px] p-6 md:p-7">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
               Выгода
             </p>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <label>
-                <span className="text-sm font-bold text-[#17384B]">
-                  Тип выгоды
-                </span>
-                <select
-                  value={benefitType}
-                  onChange={(event) =>
-                    setBenefitType(event.target.value as BenefitType)
-                  }
-                  className={fieldClass(true)}
-                >
-                  <option value="discount">Скидка</option>
-                  <option value="cashback">Cashback</option>
-                  <option value="bonus">Бонусы</option>
-                  <option value="mixed">Mixed</option>
-                </select>
-              </label>
+            <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+              Тип предложения
+            </h2>
 
-              <label>
+            <div className="mt-5 grid gap-3 md:grid-cols-4">
+              {(["discount", "cashback", "bonus", "mixed"] as BenefitType[]).map(
+                (option) => {
+                  const isActive = benefitType === option;
+
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setBenefitType(option)}
+                      className={[
+                        "rounded-2xl px-4 py-3 text-sm font-black transition",
+                        isActive
+                          ? "bg-[#17384B] text-white shadow-[0_12px_26px_rgba(23,56,75,0.18)]"
+                          : "border border-[#E5ECE9] bg-white text-[#526470] hover:border-[#FFB5A4] hover:text-[#17384B]",
+                      ].join(" ")}
+                    >
+                      {benefitLabel(option)}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+
+            <p className="mt-3 text-sm leading-7 text-[#6B7280]">
+              {benefitDescription(benefitType)}
+            </p>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div>
                 <span
                   className={[
-                    "text-sm font-bold",
+                    "text-sm font-black",
                     discountEnabled ? "text-[#17384B]" : "text-[#9CA3AF]",
                   ].join(" ")}
                 >
                   Тип скидки
                 </span>
-                <select
-                  value={discountType}
-                  onChange={(event) =>
-                    setDiscountType(event.target.value as DiscountType)
-                  }
-                  disabled={!discountEnabled}
-                  className={fieldClass(discountEnabled)}
-                >
-                  <option value="percent">Процент</option>
-                  <option value="fixed_amount">Фиксированная сумма</option>
-                </select>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {(["percent", "fixed_amount"] as DiscountType[]).map(
+                    (option) => {
+                      const isActive = discountType === option;
+
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => {
+                            if (discountEnabled) {
+                              setDiscountType(option);
+                            }
+                          }}
+                          disabled={!discountEnabled}
+                          className={[
+                            "rounded-2xl px-4 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50",
+                            isActive && discountEnabled
+                              ? "bg-[#17384B] text-white shadow-[0_12px_26px_rgba(23,56,75,0.18)]"
+                              : "border border-[#E5ECE9] bg-white text-[#526470] hover:border-[#FFB5A4] hover:text-[#17384B]",
+                          ].join(" ")}
+                        >
+                          {discountTypeLabel(option)}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+
                 <span className={helperTextClass(discountEnabled)}>
-                  Доступно только для “Скидка” и “Mixed”.
+                  {discountTypeDescription(discountType)}
                 </span>
-              </label>
+              </div>
 
               <label>
                 <span
                   className={[
-                    "text-sm font-bold",
+                    "text-sm font-black",
                     discountEnabled ? "text-[#17384B]" : "text-[#9CA3AF]",
                   ].join(" ")}
                 >
                   Значение скидки
                 </span>
+
                 <input
                   value={discountValue}
                   onChange={(event) => setDiscountValue(event.target.value)}
@@ -396,22 +685,22 @@ export default function NewPartnerOfferPage(): JSX.Element {
                   placeholder="15"
                   className={fieldClass(discountEnabled)}
                 />
+
                 <span className={helperTextClass(discountEnabled)}>
                   Например: 15 = 15% или 15 ₸.
                 </span>
               </label>
-            </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
               <label>
                 <span
                   className={[
-                    "text-sm font-bold",
+                    "text-sm font-black",
                     cashbackEnabled ? "text-[#17384B]" : "text-[#9CA3AF]",
                   ].join(" ")}
                 >
                   Cashback %
                 </span>
+
                 <input
                   value={cashbackPercent}
                   onChange={(event) => setCashbackPercent(event.target.value)}
@@ -424,20 +713,22 @@ export default function NewPartnerOfferPage(): JSX.Element {
                   placeholder="5"
                   className={fieldClass(cashbackEnabled)}
                 />
+
                 <span className={helperTextClass(cashbackEnabled)}>
-                  Доступно только для “Cashback” и “Mixed”.
+                  Доступно для “Cashback” и “Mixed”.
                 </span>
               </label>
 
               <label>
                 <span
                   className={[
-                    "text-sm font-bold",
+                    "text-sm font-black",
                     bonusEnabled ? "text-[#17384B]" : "text-[#9CA3AF]",
                   ].join(" ")}
                 >
                   Бонусные баллы
                 </span>
+
                 <input
                   value={bonusRewardPoints}
                   onChange={(event) => setBonusRewardPoints(event.target.value)}
@@ -449,15 +740,17 @@ export default function NewPartnerOfferPage(): JSX.Element {
                   placeholder="10"
                   className={fieldClass(bonusEnabled)}
                 />
+
                 <span className={helperTextClass(bonusEnabled)}>
-                  Доступно только для “Бонусы” и “Mixed”.
+                  Доступно для “Бонусы” и “Mixed”.
                 </span>
               </label>
 
               <label>
-                <span className="text-sm font-bold text-[#17384B]">
+                <span className="text-sm font-black text-[#17384B]">
                   Мин. сумма покупки
                 </span>
+
                 <input
                   value={minPurchaseAmount}
                   onChange={(event) => setMinPurchaseAmount(event.target.value)}
@@ -467,116 +760,170 @@ export default function NewPartnerOfferPage(): JSX.Element {
                   placeholder="2000"
                   className={fieldClass(true)}
                 />
+
                 <span className={helperTextClass(true)}>
-                  Общее условие, работает для любого типа выгоды.
+                  Общее условие для любого типа выгоды.
                 </span>
               </label>
             </div>
-          </div>
+          </section>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <label>
-              <span className="text-sm font-bold text-[#17384B]">
-                Лимит на пользователя
-              </span>
-              <input
-                value={usageLimitPerUser}
-                onChange={(event) => setUsageLimitPerUser(event.target.value)}
-                type="number"
-                min="1"
-                step="1"
-                placeholder="1"
-                className={fieldClass(true)}
-              />
-            </label>
+          <section className="ub-animate-fade-up ub-card rounded-[34px] p-6 md:p-7">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+              Ограничения
+            </p>
 
-            <label>
-              <span className="text-sm font-bold text-[#17384B]">
-                Общий лимит
-              </span>
-              <input
-                value={totalUsageLimit}
-                onChange={(event) => setTotalUsageLimit(event.target.value)}
-                type="number"
-                min="1"
-                step="1"
-                placeholder="500"
-                className={fieldClass(true)}
-              />
-            </label>
-          </div>
+            <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+              Лимиты и срок действия
+            </h2>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <label>
-              <span className="text-sm font-bold text-[#17384B]">
-                Начало действия
-              </span>
-              <input
-                value={startAt}
-                onChange={(event) => setStartAt(event.target.value)}
-                type="datetime-local"
-                className={fieldClass(true)}
-              />
-            </label>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Лимит на пользователя
+                </span>
 
-            <label>
-              <span className="text-sm font-bold text-[#17384B]">
-                Конец действия
-              </span>
-              <input
-                value={endAt}
-                onChange={(event) => setEndAt(event.target.value)}
-                type="datetime-local"
-                className={fieldClass(true)}
-              />
-            </label>
-          </div>
+                <input
+                  value={usageLimitPerUser}
+                  onChange={(event) => setUsageLimitPerUser(event.target.value)}
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="1"
+                  className={fieldClass(true)}
+                />
+              </label>
 
-          <label className="flex items-start gap-3 rounded-2xl bg-[#F9FAF8] p-4">
-            <input
-              checked={submitForReview}
-              onChange={(event) => setSubmitForReview(event.target.checked)}
-              type="checkbox"
-              className="mt-1"
-            />
-            <span>
-              <span className="block text-sm font-bold text-[#17384B]">
-                Отправить на модерацию
-              </span>
-              <span className="mt-1 block text-sm text-[#6B7280]">
-                Если выключено — скидка сохранится как draft.
-              </span>
-            </span>
-          </label>
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Общий лимит
+                </span>
 
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-              {error}
+                <input
+                  value={totalUsageLimit}
+                  onChange={(event) => setTotalUsageLimit(event.target.value)}
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="500"
+                  className={fieldClass(true)}
+                />
+              </label>
+
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Начало действия
+                </span>
+
+                <input
+                  value={startAt}
+                  onChange={(event) => setStartAt(event.target.value)}
+                  type="datetime-local"
+                  className={fieldClass(true)}
+                />
+              </label>
+
+              <label>
+                <span className="text-sm font-black text-[#17384B]">
+                  Конец действия
+                </span>
+
+                <input
+                  value={endAt}
+                  onChange={(event) => setEndAt(event.target.value)}
+                  type="datetime-local"
+                  className={fieldClass(true)}
+                />
+              </label>
             </div>
-          )}
-
-          {createdStatus && (
-            <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-700">
-              {createdStatus}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3 md:flex-row md:justify-end">
-            <Link
-              href="/partner/offers"
-              className="rounded-2xl border border-[#D8E3DE] px-5 py-3 text-center text-sm font-bold text-[#17384B]"
-            >
-              Отмена
-            </Link>
-            <button
-              type="submit"
-              disabled={isSaving || !selectedCategoryId}
-              className="rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
-            >
-              {isSaving ? "Сохраняем..." : "Создать скидку"}
-            </button>
-          </div>
+          </section>
         </div>
+
+        <aside className="space-y-6 lg:sticky lg:top-[92px]">
+          <section className="ub-animate-fade-up ub-delay-100 ub-card rounded-[34px] p-6">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+              Offer preview
+            </p>
+
+            <div className="mt-5 overflow-hidden rounded-[28px] border border-[#E5ECE9] bg-white">
+              <div className="flex h-36 items-center justify-center bg-[linear-gradient(135deg,#17384B,#FF9F8A)] text-sm font-black uppercase tracking-[0.18em] text-white">
+                UniBestia
+              </div>
+
+              <div className="p-5">
+                <span className="rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-black text-[#FF7F6E]">
+                  {previewBenefit}
+                </span>
+
+                <h3 className="mt-4 line-clamp-2 text-xl font-black text-[#17384B]">
+                  {generatePreviewTitle(title)}
+                </h3>
+
+                <p className="mt-2 line-clamp-3 text-sm leading-6 text-[#6B7280]">
+                  {generatePreviewDescription(shortDescription)}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[34px] border border-[#FFE0D8] bg-[#FFF7F4] p-6 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#FF7F6E]">
+              Status
+            </p>
+
+            <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+              Публикация
+            </h2>
+
+            <label className="mt-5 flex items-start gap-3 rounded-2xl bg-white p-4">
+              <input
+                checked={submitForReview}
+                onChange={(event) => setSubmitForReview(event.target.checked)}
+                type="checkbox"
+                className="mt-1"
+              />
+
+              <span>
+                <span className="block text-sm font-black text-[#17384B]">
+                  Отправить на модерацию
+                </span>
+
+                <span className="mt-1 block text-sm leading-6 text-[#6B7280]">
+                  Если выключено — скидка сохранится как draft.
+                </span>
+              </span>
+            </label>
+
+            {error && (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                {error}
+              </div>
+            )}
+
+            {createdStatus && (
+              <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
+                {createdStatus}
+              </div>
+            )}
+
+            <div className="mt-5 grid gap-3">
+              <button
+                type="submit"
+                disabled={isSaving || !selectedCategoryId}
+                className="ub-gradient-button rounded-2xl px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSaving ? "Сохраняем..." : "Создать скидку"}
+              </button>
+
+              <Link
+                href="/partner/offers"
+                className="rounded-2xl border border-[#D8E3DE] bg-white px-5 py-3 text-center text-sm font-black text-[#17384B] transition hover:bg-[#F7F6F1]"
+              >
+                Отмена
+              </Link>
+            </div>
+          </section>
+        </aside>
       </form>
     </div>
   );
