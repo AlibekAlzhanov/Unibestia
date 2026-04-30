@@ -81,20 +81,20 @@ export async function seedOffers(dataSource: DataSource): Promise<void> {
     }
   );
 
-  await upsertByWhere(
-    mediaRepo,
-    {
-      offerId: offer1.id,
-      fileUrl: "https://example.local/images/coffee-lab-15-cover.jpg",
-    },
-    {
-      offerId: offer1.id,
-      mediaType: OfferMediaType.IMAGE,
-      fileUrl: COFFEE_LAB_15_COVER_URL,
-      sortOrder: 1,
-      isCover: true,
-    }
-  );
+    await upsertByWhere(
+      mediaRepo,
+      {
+        offerId: offer1.id,
+        fileUrl: COFFEE_LAB_15_COVER_URL,
+      },
+      {
+        offerId: offer1.id,
+        mediaType: OfferMediaType.IMAGE,
+        fileUrl: COFFEE_LAB_15_COVER_URL,
+        sortOrder: 1,
+        isCover: true,
+      }
+    );
 
   const offer2 = await upsertByWhere(
     offerRepo,
@@ -126,20 +126,20 @@ export async function seedOffers(dataSource: DataSource): Promise<void> {
     }
   );
 
-  await upsertByWhere(
-    mediaRepo,
-    {
-      offerId: offer2.id,
-      fileUrl: "https://example.local/images/coffee-lab-breakfast-cover.jpg",
-    },
-    {
-      offerId: offer2.id,
-      mediaType: OfferMediaType.BANNER,
-      fileUrl: COFFEE_LAB_BREAKFAST_COVER_URL,
-      sortOrder: 1,
-      isCover: true,
-    }
-  );
+    await upsertByWhere(
+      mediaRepo,
+      {
+        offerId: offer2.id,
+        fileUrl: COFFEE_LAB_BREAKFAST_COVER_URL,
+      },
+      {
+        offerId: offer2.id,
+        mediaType: OfferMediaType.BANNER,
+        fileUrl: COFFEE_LAB_BREAKFAST_COVER_URL,
+        sortOrder: 1,
+        isCover: true,
+      }
+    );
 
   if (megaLocation) {
     await upsertByWhere(

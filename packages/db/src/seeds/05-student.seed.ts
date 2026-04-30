@@ -68,7 +68,7 @@ export async function seedStudents(dataSource: DataSource): Promise<void> {
     method: StudentVerificationMethod.DOCUMENT_PDF,
     status: StudentVerificationRequestStatus.APPROVED,
     submittedEmail: "madina@student.kaznu.local",
-    documentUrl: "https://example.local/docs/madina-student-card.pdf",
+    documentUrl: null,
     documentType: "student_card_pdf",
     reviewedByUserId: admin.id,
     reviewedAt: new Date(),
