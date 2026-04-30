@@ -14,6 +14,8 @@ import {
   PartnerLocation,
   PartnerMember,
   Redemption,
+  ReferralCode,
+  ReferralReward,
   Review,
   Role,
   StudentProfile,
@@ -22,6 +24,8 @@ import {
   UniversityEmailDomain,
   User,
   UserRole,
+  Wallet,
+  WalletTransaction,
 } from "@repo/db";
 import {
   CatalogModule,
@@ -39,6 +43,7 @@ import { CatalogRouter } from "./routers/routers/catalog.router.js";
 import { NotificationsRouter } from "./routers/routers/notifications.router.js";
 import { ProfileRouter } from "./routers/routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/routers/redemptions.router.js";
+import { ReferralsRouter } from "./routers/routers/referrals.router.js";
 import { WalletRouter } from "./routers/routers/wallet.router.js";
 
 @Module({
@@ -69,7 +74,11 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
       OfferCategory,
       OfferLocation,
       Redemption,
+      ReferralCode,
+      ReferralReward,
       Review,
+      Wallet,
+      WalletTransaction,
     ]),
   ],
   providers: [
@@ -82,6 +91,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     RedemptionsRouter,
     BusinessRouter,
     NotificationsRouter,
+    ReferralsRouter,
     AdminStudentVerificationsRouter,
     AuthService,
   ],

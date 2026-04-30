@@ -8,6 +8,7 @@ import { CatalogRouter } from "./routers/catalog.router.js";
 import { NotificationsRouter } from "./routers/notifications.router.js";
 import { ProfileRouter } from "./routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/redemptions.router.js";
+import { ReferralsRouter } from "./routers/referrals.router.js";
 import { WalletRouter } from "./routers/wallet.router.js";
 
 @Injectable()
@@ -20,6 +21,7 @@ export class AppRouterClass {
     private readonly redemptionsRouter: RedemptionsRouter,
     private readonly businessRouter: BusinessRouter,
     private readonly notificationsRouter: NotificationsRouter,
+    private readonly referralsRouter: ReferralsRouter,
     private readonly adminStudentVerificationsRouter: AdminStudentVerificationsRouter
   ) {}
 
@@ -32,6 +34,7 @@ export class AppRouterClass {
       redemptions: this.redemptionsRouter.router,
       business: this.businessRouter.router,
       notifications: this.notificationsRouter.router,
+      referrals: this.referralsRouter.router,
       adminStudentVerifications: this.adminStudentVerificationsRouter.router,
     });
   }
