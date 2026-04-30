@@ -13,6 +13,7 @@ import { useTRPC } from "@/utils/trpc";
 const studentLinks = [
   { href: "/home", label: "Главная" },
   { href: "/catalog", label: "Каталог" },
+  { href: "/favorites", label: "Избранное" },
 ];
 
 const dropdownLinks = [
@@ -120,7 +121,9 @@ export function Navbar(): JSX.Element {
 
   const displayName =
     profile?.user.displayName ||
-    [profile?.user.firstName, profile?.user.lastName].filter(Boolean).join(" ") ||
+    [profile?.user.firstName, profile?.user.lastName]
+      .filter(Boolean)
+      .join(" ") ||
     profile?.user.email ||
     "Профиль";
 
@@ -309,8 +312,7 @@ export function Navbar(): JSX.Element {
             <div className="grid gap-2">
               {studentLinks.map((link) => {
                 const isActive =
-                  pathname === link.href ||
-                  pathname.startsWith(`${link.href}/`);
+                  pathname === link.href || pathname.startsWith(`${link.href}/`);
 
                 return (
                   <Link
@@ -332,8 +334,7 @@ export function Navbar(): JSX.Element {
 
               {dropdownLinks.map((link) => {
                 const isActive =
-                  pathname === link.href ||
-                  pathname.startsWith(`${link.href}/`);
+                  pathname === link.href || pathname.startsWith(`${link.href}/`);
 
                 return (
                   <Link

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { type JSX, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTRPC } from "@/utils/trpc";
+import { useTRPC, useTRPCClient } from "@/utils/trpc";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 type OfferCard = {
@@ -16,6 +16,7 @@ type OfferCard = {
   discountValue?: string | null;
   cashbackPercent?: string | null;
   bonusRewardPoints?: number | null;
+  isFavorite?: boolean | null;
   coverMedia?: {
     id: string;
     fileUrl: string;
@@ -149,13 +150,37 @@ function PartnerLogo({ offer }: { offer: OfferCard }): JSX.Element {
   );
 }
 
-function CatalogOfferCard({ offer }: { offer: OfferCard }): JSX.Element {
+function CatalogOfferCard({
+  offer,
+  isFavorite,
+  isToggling,
+  onToggleFavorite,
+}: {
+  offer: OfferCard;
+  isFavorite: boolean;
+  isToggling: boolean;
+  onToggleFavorite: () => void;
+}): JSX.Element {
   return (
-    <Link
-      href={`/offer/${offer.slug}`}
-      className="ub-card group flex h-full flex-col rounded-[30px] p-5"
-    >
-      <CatalogOfferCover offer={offer} />
+    <article className="ub-card group relative flex h-full flex-col rounded-[30px] p-5">
+      <button
+        type="button"
+        onClick={onToggleFavorite}
+        disabled={isToggling}
+        aria-label={isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+        className={[
+          "absolute right-8 top-8 z-10 flex h-11 w-11 items-center justify-center rounded-2xl border text-lg font-black shadow-[0_12px_24px_rgba(15,23,42,0.14)] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-60",
+          isFavorite
+            ? "border-[#FFB5A4] bg-[#FFF0EB] text-[#FF7F6E]"
+            : "border-white/50 bg-white/85 text-[#526470] hover:bg-[#FFF0EB] hover:text-[#FF7F6E]",
+        ].join(" ")}
+      >
+        {isFavorite ? "♥" : "♡"}
+      </button>
+
+      <Link href={`/offer/${offer.slug}`} className="block">
+        <CatalogOfferCover offer={offer} />
+      </Link>
 
       <div className="mt-4 flex flex-1 flex-col">
         <div className="mb-4 flex items-start justify-between gap-4">
@@ -167,9 +192,11 @@ function CatalogOfferCard({ offer }: { offer: OfferCard }): JSX.Element {
                 {offer.partner?.brandName ?? "Партнёр"}
               </p>
 
-              <h2 className="mt-1 line-clamp-2 text-lg font-black leading-tight text-[#17384B]">
-                {offer.title}
-              </h2>
+              <Link href={`/offer/${offer.slug}`}>
+                <h2 className="mt-1 line-clamp-2 text-lg font-black leading-tight text-[#17384B] transition hover:text-[#FF7F6E]">
+                  {offer.title}
+                </h2>
+              </Link>
             </div>
           </div>
 
@@ -187,12 +214,15 @@ function CatalogOfferCard({ offer }: { offer: OfferCard }): JSX.Element {
             {offer.category?.name ?? "Категория"}
           </span>
 
-          <span className="shrink-0 text-sm font-black text-[#17384B] transition group-hover:text-[#FF7F6E]">
+          <Link
+            href={`/offer/${offer.slug}`}
+            className="shrink-0 text-sm font-black text-[#17384B] transition hover:text-[#FF7F6E]"
+          >
             Подробнее →
-          </span>
+          </Link>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -271,12 +301,14 @@ function CatalogErrorState({ message }: { message: string }): JSX.Element {
 
 export default function CatalogPage(): JSX.Element {
   const trpc = useTRPC();
+  const trpcClient = useTRPCClient();
 
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<
     string | undefined
   >();
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("recommended");
+  const [togglingOfferId, setTogglingOfferId] = useState<string | null>(null);
 
   const debouncedSearch = useDebouncedValue(search, 400);
 
@@ -301,6 +333,12 @@ export default function CatalogPage(): JSX.Element {
     placeholderData: (previousData) => previousData,
   });
 
+  const favoriteIdsQuery = useQuery({
+    ...trpc.catalog.getFavoriteOfferIds.queryOptions(),
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const categories = useMemo(
     () => (categoriesQuery.data ?? []) as Category[],
     [categoriesQuery.data]
@@ -309,6 +347,11 @@ export default function CatalogPage(): JSX.Element {
   const offers = useMemo(
     () => (offersQuery.data?.items ?? []) as OfferCard[],
     [offersQuery.data?.items]
+  );
+
+  const favoriteOfferIds = useMemo(
+    () => new Set((favoriteIdsQuery.data ?? []) as string[]),
+    [favoriteIdsQuery.data]
   );
 
   const sortedOffers = useMemo(
@@ -331,6 +374,17 @@ export default function CatalogPage(): JSX.Element {
     setSortMode("recommended");
   }
 
+  async function toggleFavorite(offerId: string): Promise<void> {
+    setTogglingOfferId(offerId);
+
+    try {
+      await trpcClient.catalog.toggleFavorite.mutate({ offerId });
+      await favoriteIdsQuery.refetch();
+    } finally {
+      setTogglingOfferId(null);
+    }
+  }
+
   return (
     <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] flex-col gap-8 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
       <section className="ub-animate-fade-up relative overflow-hidden rounded-[36px] bg-[linear-gradient(135deg,#17384B_0%,#255B73_52%,#FF9F8A_130%)] p-6 text-white shadow-[0_24px_70px_rgba(23,56,75,0.24)] md:p-10">
@@ -348,10 +402,25 @@ export default function CatalogPage(): JSX.Element {
             </h1>
 
             <p className="mt-4 max-w-2xl text-base leading-8 text-[#DDE8EA]">
-              Ищи предложения по названию, фильтруй по категориям и открывай
-              карточку скидки, чтобы получить QR-код для использования у
-              партнёра.
+              Ищи предложения, сохраняй понравившиеся скидки в избранное и
+              открывай карточку, чтобы получить QR-код у партнёра.
             </p>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Link
+                href="/favorites"
+                className="ub-gradient-button rounded-2xl px-5 py-3 text-center text-sm font-black text-white"
+              >
+                Моё избранное
+              </Link>
+
+              <Link
+                href="/my-redemptions"
+                className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-center text-sm font-black text-white transition hover:bg-white/15"
+              >
+                Мои QR
+              </Link>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3 lg:grid-cols-1">
@@ -366,10 +435,10 @@ export default function CatalogPage(): JSX.Element {
 
             <div className="rounded-[24px] border border-white/15 bg-white/12 p-4 backdrop-blur-md">
               <p className="text-2xl font-black">
-                {categoriesQuery.isLoading ? "..." : categories.length}
+                {favoriteIdsQuery.isLoading ? "..." : favoriteOfferIds.size}
               </p>
               <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[#DDE8EA]">
-                Категорий
+                Избранное
               </p>
             </div>
 
@@ -527,7 +596,14 @@ export default function CatalogPage(): JSX.Element {
                   index === 2 ? "ub-delay-200" : "",
                 ].join(" ")}
               >
-                <CatalogOfferCard offer={offer} />
+                <CatalogOfferCard
+                  offer={offer}
+                  isFavorite={favoriteOfferIds.has(offer.id)}
+                  isToggling={togglingOfferId === offer.id}
+                  onToggleFavorite={() => {
+                    void toggleFavorite(offer.id);
+                  }}
+                />
               </div>
             ))}
           </div>

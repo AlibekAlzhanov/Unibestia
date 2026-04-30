@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 
 import {
   AuditLog,
+  FavoriteOffer,
   ModerationTask,
   Notification,
   Offer,
@@ -99,6 +100,7 @@ export const entities = [
   Offer,
   OfferMedia,
   OfferLocation,
+  FavoriteOffer,
   Wallet,
   WalletTransaction,
   ReferralCode,

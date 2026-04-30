@@ -205,7 +205,9 @@ export default function OfferDetailsPage(): JSX.Element {
   const [createdRedemption, setCreatedRedemption] =
     useState<CreatedRedemption | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState<
     string | undefined
   >();
@@ -217,6 +219,12 @@ export default function OfferDetailsPage(): JSX.Element {
     staleTime: 60 * 1000,
   });
 
+  const favoriteIdsQuery = useQuery({
+    ...trpc.catalog.getFavoriteOfferIds.queryOptions(),
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const profileQuery = useQuery({
     ...trpc.profile.getMyProfile.queryOptions(),
     enabled: Boolean(offerQuery.data),
@@ -224,6 +232,12 @@ export default function OfferDetailsPage(): JSX.Element {
   });
 
   const offer = offerQuery.data as OfferDetails | undefined;
+  const favoriteOfferIds = useMemo(
+    () => new Set((favoriteIdsQuery.data ?? []) as string[]),
+    [favoriteIdsQuery.data]
+  );
+
+  const isFavorite = offer ? favoriteOfferIds.has(offer.id) : false;
   const isAllowedStudentEmail =
     profileQuery.data?.allowedStudentEmailDomain?.isAllowed === true;
 
@@ -251,6 +265,29 @@ export default function OfferDetailsPage(): JSX.Element {
   const minPurchaseText = offer?.minPurchaseAmount
     ? `${Number(offer.minPurchaseAmount).toFixed(0)} ₸`
     : "Без минимума";
+
+  async function toggleFavorite(): Promise<void> {
+    if (!offer) return;
+
+    setIsTogglingFavorite(true);
+    setFavoriteError(null);
+
+    try {
+      await trpcClient.catalog.toggleFavorite.mutate({
+        offerId: offer.id,
+      });
+
+      await favoriteIdsQuery.refetch();
+    } catch (error) {
+      setFavoriteError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось обновить избранное"
+      );
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  }
 
   async function createQr(): Promise<void> {
     if (!offer) return;
@@ -294,16 +331,40 @@ export default function OfferDetailsPage(): JSX.Element {
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1180px] flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
-      <Link
-        href="/catalog"
-        className="inline-flex w-fit items-center rounded-2xl bg-white px-4 py-2 text-sm font-black text-[#FF7F6E] shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:bg-[#FFF0EB]"
-      >
-        ← Назад в каталог
-      </Link>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Link
+          href="/catalog"
+          className="inline-flex w-fit items-center rounded-2xl bg-white px-4 py-2 text-sm font-black text-[#FF7F6E] shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:bg-[#FFF0EB]"
+        >
+          ← Назад в каталог
+        </Link>
+
+        <Link
+          href="/favorites"
+          className="inline-flex w-fit items-center rounded-2xl bg-[#FFF0EB] px-4 py-2 text-sm font-black text-[#FF7F6E] transition hover:bg-[#FFE4DC]"
+        >
+          Моё избранное →
+        </Link>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.35fr_0.85fr] lg:items-start">
         <section className="ub-animate-fade-up overflow-hidden rounded-[36px] border border-[#E5ECE9] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
           <div className="relative">
+            <button
+              type="button"
+              onClick={() => void toggleFavorite()}
+              disabled={isTogglingFavorite}
+              className={[
+                "absolute right-5 top-5 z-10 flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black shadow-[0_14px_30px_rgba(15,23,42,0.18)] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-60",
+                isFavorite
+                  ? "border-[#FFB5A4] bg-[#FFF0EB] text-[#FF7F6E]"
+                  : "border-white/50 bg-white/90 text-[#17384B] hover:bg-[#FFF0EB] hover:text-[#FF7F6E]",
+              ].join(" ")}
+            >
+              <span>{isFavorite ? "♥" : "♡"}</span>
+              <span>{isFavorite ? "В избранном" : "В избранное"}</span>
+            </button>
+
             {coverMedia?.fileUrl ? (
               <div className="relative h-72 w-full overflow-hidden bg-[#F7F6F1] md:h-[440px]">
                 <Image
@@ -349,6 +410,12 @@ export default function OfferDetailsPage(): JSX.Element {
           </div>
 
           <div className="p-5 md:p-7">
+            {favoriteError && (
+              <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                {favoriteError}
+              </div>
+            )}
+
             <div className="grid gap-5 lg:grid-cols-[1fr_220px] lg:items-start">
               <div>
                 <h1 className="text-[30px] font-black leading-tight tracking-[-0.04em] text-[#17384B] md:text-4xl">
@@ -469,28 +536,6 @@ export default function OfferDetailsPage(): JSX.Element {
                   {offer.partner.description}
                 </p>
               )}
-
-              <div className="mt-5 grid gap-2">
-                {offer.partner.contactEmail && (
-                  <a
-                    href={`mailto:${offer.partner.contactEmail}`}
-                    className="rounded-2xl bg-[#F7F6F1] px-4 py-3 text-sm font-bold text-[#17384B] transition hover:bg-[#FFF0EB]"
-                  >
-                    {offer.partner.contactEmail}
-                  </a>
-                )}
-
-                {offer.partner.websiteUrl && (
-                  <a
-                    href={offer.partner.websiteUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-2xl bg-[#F7F6F1] px-4 py-3 text-sm font-bold text-[#17384B] transition hover:bg-[#FFF0EB]"
-                  >
-                    Сайт партнёра →
-                  </a>
-                )}
-              </div>
             </div>
           )}
 
@@ -523,8 +568,6 @@ export default function OfferDetailsPage(): JSX.Element {
             ) : (
               <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
                 QR доступен только студентам с разрешённой студенческой почтой.
-                Для Satbayev используйте email{" "}
-                <span className="font-mono">name@stud.satbayev.university</span>.
                 <Link
                   href="/profile"
                   className="mt-3 block rounded-2xl bg-[#17384B] px-4 py-2 text-center text-sm font-bold text-white"

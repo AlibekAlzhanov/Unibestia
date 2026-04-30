@@ -4,10 +4,12 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { PostHogModule } from "@repo/analytics";
 import {
   AuditLog,
+  FavoriteOffer,
   ModerationTask,
   Offer,
   OfferCategory,
   OfferLocation,
+  OfferMedia,
   Partner,
   PartnerLocation,
   PartnerMember,
@@ -48,6 +50,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     RedemptionsModule,
     TypeOrmModule.forFeature([
       AuditLog,
+      FavoriteOffer,
       ModerationTask,
       User,
       UserRole,
@@ -61,6 +64,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
       PartnerMember,
       Offer,
       OfferCategory,
+      OfferMedia,
       OfferLocation,
       Redemption,
     ]),
