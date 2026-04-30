@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { type JSX, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type JSX, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LocalQrCode } from "@/components/local-qr-code";
 import { useTRPC, useTRPCClient } from "@/utils/trpc";
@@ -60,11 +60,26 @@ type OfferDetails = {
     id: string;
     rating: number;
     text?: string | null;
+    createdAt?: Date | string | null;
   }>;
   stats: {
     reviewCount: number;
     averageRating: number | null;
   };
+};
+
+type ReviewEligibility = {
+  canReview: boolean;
+  reviewableRedemptionId: string | null;
+  usedCount: number;
+  reviewedCount: number;
+  usedRedemptions: Array<{
+    id: string;
+    status: string;
+    usedAt: Date | string | null;
+    createdAt: Date | string;
+    hasReview: boolean;
+  }>;
 };
 
 function formatBenefit(offer: {
@@ -90,6 +105,14 @@ function formatBenefit(offer: {
   }
 
   return "Скидка";
+}
+
+function formatDateTime(value?: Date | string | null): string {
+  if (!value) {
+    return "—";
+  }
+
+  return new Date(value).toLocaleString("ru-RU");
 }
 
 function useIsMobileViewport(): boolean {
@@ -196,6 +219,111 @@ function RatingStars({ rating }: { rating: number | null }): JSX.Element {
   );
 }
 
+function ReviewForm({
+  eligibility,
+  isSubmitting,
+  rating,
+  text,
+  error,
+  message,
+  onRatingChange,
+  onTextChange,
+  onSubmit,
+}: {
+  eligibility?: ReviewEligibility;
+  isSubmitting: boolean;
+  rating: number;
+  text: string;
+  error: string | null;
+  message: string | null;
+  onRatingChange: (value: number) => void;
+  onTextChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}): JSX.Element {
+  if (!eligibility) {
+    return (
+      <div className="rounded-2xl bg-[#F7F6F1] p-4 text-sm text-[#6B7280]">
+        Проверяем, можно ли оставить отзыв...
+      </div>
+    );
+  }
+
+  if (!eligibility.canReview) {
+    return (
+      <div className="rounded-2xl bg-[#F7F6F1] p-4 text-sm leading-6 text-[#6B7280]">
+        Оставить отзыв можно только после подтверждённого QR-использования.
+        Использовано QR: {eligibility.usedCount}. Уже оставлено отзывов:{" "}
+        {eligibility.reviewedCount}.
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      className="rounded-[24px] border border-[#FFE0D8] bg-[#FFF7F4] p-4"
+    >
+      <p className="text-sm font-black text-[#17384B]">Оставить отзыв</p>
+      <p className="mt-1 text-xs leading-5 text-[#8A4B3F]">
+        Отзыв доступен, потому что у вас есть подтверждённое использование QR по
+        этой скидке.
+      </p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {Array.from({ length: 5 }).map((_, index) => {
+          const value = index + 1;
+          const isActive = value <= rating;
+
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onRatingChange(value)}
+              className={[
+                "flex h-10 w-10 items-center justify-center rounded-2xl border text-lg font-black transition",
+                isActive
+                  ? "border-[#FF9F8A] bg-[#FF9F8A] text-white"
+                  : "border-[#FFD6CC] bg-white text-[#FF9F8A] hover:bg-[#FFF0EB]",
+              ].join(" ")}
+            >
+              ★
+            </button>
+          );
+        })}
+      </div>
+
+      <textarea
+        value={text}
+        onChange={(event) => onTextChange(event.target.value)}
+        rows={4}
+        maxLength={1000}
+        placeholder="Что понравилось? Как прошла активация скидки?"
+        className="mt-4 w-full rounded-2xl border border-[#FFD6CC] bg-white px-4 py-3 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#B98B82] focus:border-[#FF9F8A] focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
+      />
+
+      {message && (
+        <div className="mt-3 rounded-2xl border border-green-200 bg-green-50 p-3 text-sm font-bold text-green-700">
+          {message}
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
+          {error}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="ub-gradient-button mt-4 w-full rounded-2xl px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isSubmitting ? "Отправляем..." : "Опубликовать отзыв"}
+      </button>
+    </form>
+  );
+}
+
 export default function OfferDetailsPage(): JSX.Element {
   const params = useParams<{ slug: string }>();
   const trpc = useTRPC();
@@ -205,24 +333,22 @@ export default function OfferDetailsPage(): JSX.Element {
   const [createdRedemption, setCreatedRedemption] =
     useState<CreatedRedemption | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [favoriteError, setFavoriteError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState<
     string | undefined
   >();
+
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
 
   const offerQuery = useQuery({
     ...trpc.catalog.getOfferBySlug.queryOptions({
       slug: params.slug,
     }),
     staleTime: 60 * 1000,
-  });
-
-  const favoriteIdsQuery = useQuery({
-    ...trpc.catalog.getFavoriteOfferIds.queryOptions(),
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 
   const profileQuery = useQuery({
@@ -232,12 +358,21 @@ export default function OfferDetailsPage(): JSX.Element {
   });
 
   const offer = offerQuery.data as OfferDetails | undefined;
-  const favoriteOfferIds = useMemo(
-    () => new Set((favoriteIdsQuery.data ?? []) as string[]),
-    [favoriteIdsQuery.data]
-  );
+  const offerIdForReview =
+    offer?.id ?? "00000000-0000-0000-0000-000000000000";
 
-  const isFavorite = offer ? favoriteOfferIds.has(offer.id) : false;
+  const reviewEligibilityQuery = useQuery({
+    ...trpc.catalog.getMyReviewEligibility.queryOptions({
+      offerId: offerIdForReview,
+    }),
+    enabled: Boolean(offer?.id),
+    staleTime: 30_000,
+  });
+
+  const reviewEligibility = reviewEligibilityQuery.data as
+    | ReviewEligibility
+    | undefined;
+
   const isAllowedStudentEmail =
     profileQuery.data?.allowedStudentEmailDomain?.isAllowed === true;
 
@@ -265,29 +400,6 @@ export default function OfferDetailsPage(): JSX.Element {
   const minPurchaseText = offer?.minPurchaseAmount
     ? `${Number(offer.minPurchaseAmount).toFixed(0)} ₸`
     : "Без минимума";
-
-  async function toggleFavorite(): Promise<void> {
-    if (!offer) return;
-
-    setIsTogglingFavorite(true);
-    setFavoriteError(null);
-
-    try {
-      await trpcClient.catalog.toggleFavorite.mutate({
-        offerId: offer.id,
-      });
-
-      await favoriteIdsQuery.refetch();
-    } catch (error) {
-      setFavoriteError(
-        error instanceof Error
-          ? error.message
-          : "Не удалось обновить избранное"
-      );
-    } finally {
-      setIsTogglingFavorite(false);
-    }
-  }
 
   async function createQr(): Promise<void> {
     if (!offer) return;
@@ -321,6 +433,39 @@ export default function OfferDetailsPage(): JSX.Element {
     }
   }
 
+  async function submitReview(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!reviewEligibility?.reviewableRedemptionId) {
+      setReviewError("Нет подтверждённого QR, по которому можно оставить отзыв.");
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    setReviewError(null);
+    setReviewMessage(null);
+
+    try {
+      await trpcClient.catalog.createReview.mutate({
+        redemptionId: reviewEligibility.reviewableRedemptionId,
+        rating: reviewRating,
+        text: reviewText.trim() || undefined,
+      });
+
+      setReviewText("");
+      setReviewRating(5);
+      setReviewMessage("Отзыв опубликован.");
+
+      await Promise.all([offerQuery.refetch(), reviewEligibilityQuery.refetch()]);
+    } catch (error) {
+      setReviewError(
+        error instanceof Error ? error.message : "Не удалось оставить отзыв"
+      );
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  }
+
   if (offerQuery.isLoading) {
     return <LoadingOfferDetails />;
   }
@@ -331,40 +476,16 @@ export default function OfferDetailsPage(): JSX.Element {
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1180px] flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link
-          href="/catalog"
-          className="inline-flex w-fit items-center rounded-2xl bg-white px-4 py-2 text-sm font-black text-[#FF7F6E] shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:bg-[#FFF0EB]"
-        >
-          ← Назад в каталог
-        </Link>
-
-        <Link
-          href="/favorites"
-          className="inline-flex w-fit items-center rounded-2xl bg-[#FFF0EB] px-4 py-2 text-sm font-black text-[#FF7F6E] transition hover:bg-[#FFE4DC]"
-        >
-          Моё избранное →
-        </Link>
-      </div>
+      <Link
+        href="/catalog"
+        className="inline-flex w-fit items-center rounded-2xl bg-white px-4 py-2 text-sm font-black text-[#FF7F6E] shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:bg-[#FFF0EB]"
+      >
+        ← Назад в каталог
+      </Link>
 
       <div className="grid gap-6 lg:grid-cols-[1.35fr_0.85fr] lg:items-start">
         <section className="ub-animate-fade-up overflow-hidden rounded-[36px] border border-[#E5ECE9] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
           <div className="relative">
-            <button
-              type="button"
-              onClick={() => void toggleFavorite()}
-              disabled={isTogglingFavorite}
-              className={[
-                "absolute right-5 top-5 z-10 flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black shadow-[0_14px_30px_rgba(15,23,42,0.18)] backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-60",
-                isFavorite
-                  ? "border-[#FFB5A4] bg-[#FFF0EB] text-[#FF7F6E]"
-                  : "border-white/50 bg-white/90 text-[#17384B] hover:bg-[#FFF0EB] hover:text-[#FF7F6E]",
-              ].join(" ")}
-            >
-              <span>{isFavorite ? "♥" : "♡"}</span>
-              <span>{isFavorite ? "В избранном" : "В избранное"}</span>
-            </button>
-
             {coverMedia?.fileUrl ? (
               <div className="relative h-72 w-full overflow-hidden bg-[#F7F6F1] md:h-[440px]">
                 <Image
@@ -410,12 +531,6 @@ export default function OfferDetailsPage(): JSX.Element {
           </div>
 
           <div className="p-5 md:p-7">
-            {favoriteError && (
-              <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-                {favoriteError}
-              </div>
-            )}
-
             <div className="grid gap-5 lg:grid-cols-[1fr_220px] lg:items-start">
               <div>
                 <h1 className="text-[30px] font-black leading-tight tracking-[-0.04em] text-[#17384B] md:text-4xl">
@@ -536,6 +651,28 @@ export default function OfferDetailsPage(): JSX.Element {
                   {offer.partner.description}
                 </p>
               )}
+
+              <div className="mt-5 grid gap-2">
+                {offer.partner.contactEmail && (
+                  <a
+                    href={`mailto:${offer.partner.contactEmail}`}
+                    className="rounded-2xl bg-[#F7F6F1] px-4 py-3 text-sm font-bold text-[#17384B] transition hover:bg-[#FFF0EB]"
+                  >
+                    {offer.partner.contactEmail}
+                  </a>
+                )}
+
+                {offer.partner.websiteUrl && (
+                  <a
+                    href={offer.partner.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-2xl bg-[#F7F6F1] px-4 py-3 text-sm font-bold text-[#17384B] transition hover:bg-[#FFF0EB]"
+                  >
+                    Сайт партнёра →
+                  </a>
+                )}
+              </div>
             </div>
           )}
 
@@ -568,6 +705,8 @@ export default function OfferDetailsPage(): JSX.Element {
             ) : (
               <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
                 QR доступен только студентам с разрешённой студенческой почтой.
+                Для Satbayev используйте email{" "}
+                <span className="font-mono">name@stud.satbayev.university</span>.
                 <Link
                   href="/profile"
                   className="mt-3 block rounded-2xl bg-[#17384B] px-4 py-2 text-center text-sm font-bold text-white"
@@ -692,6 +831,20 @@ export default function OfferDetailsPage(): JSX.Element {
               </div>
             </div>
 
+            <div className="mt-4">
+              <ReviewForm
+                eligibility={reviewEligibility}
+                isSubmitting={isSubmittingReview}
+                rating={reviewRating}
+                text={reviewText}
+                error={reviewError}
+                message={reviewMessage}
+                onRatingChange={setReviewRating}
+                onTextChange={setReviewText}
+                onSubmit={submitReview}
+              />
+            </div>
+
             <div className="mt-4 space-y-3">
               {offer.reviews.length === 0 ? (
                 <p className="rounded-2xl bg-[#F7F6F1] p-4 text-sm text-[#6B7280]">
@@ -714,6 +867,12 @@ export default function OfferDetailsPage(): JSX.Element {
                     {review.text && (
                       <p className="mt-2 text-sm leading-6 text-[#6B7280]">
                         {review.text}
+                      </p>
+                    )}
+
+                    {review.createdAt && (
+                      <p className="mt-2 text-xs font-bold text-[#9CA3AF]">
+                        {formatDateTime(review.createdAt)}
                       </p>
                     )}
                   </div>

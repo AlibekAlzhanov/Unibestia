@@ -6,27 +6,15 @@ import { z } from "zod";
 import {
   FavoriteOffer,
   Offer,
-  OfferCategory,
-  OfferMedia,
-  OfferStatus,
-  Partner,
+  Redemption,
+  RedemptionStatus,
+  Review,
+  ReviewStatus,
   User,
   UserStatus,
 } from "@repo/db";
 import { CatalogService } from "@repo/domain-services";
 import { procedure, protectedProcedure, t } from "../base/index.js";
-
-type AuthContextLike = {
-  auth: {
-    userId: string | null;
-    user?: {
-      email: string | null;
-      firstName: string | null;
-      lastName: string | null;
-      imageUrl: string | null;
-    } | null;
-  };
-};
 
 const listOffersInputSchema = z
   .object({
@@ -45,34 +33,38 @@ const listFavoritesInputSchema = z
   })
   .optional();
 
-function uniqueNonEmptyIds(ids: Array<string | null | undefined>): string[] {
-  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
-}
+type AuthContextLike = {
+  auth: {
+    userId: string | null;
+    user?: {
+      email: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      imageUrl: string | null;
+    } | null;
+  };
+};
 
-function normalizeLimit(limit: number): number {
-  return Math.min(Math.max(limit, 1), 50);
-}
+function normalizeNullableText(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
 
-function normalizeOffset(offset: number): number {
-  return Math.max(offset, 0);
+  return normalized ? normalized : null;
 }
 
 @Injectable()
 export class CatalogRouter {
   constructor(
     private readonly catalogService: CatalogService,
-    @InjectRepository(FavoriteOffer)
-    private readonly favoriteOffersRepo: Repository<FavoriteOffer>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     @InjectRepository(Offer)
     private readonly offersRepo: Repository<Offer>,
-    @InjectRepository(OfferMedia)
-    private readonly offerMediaRepo: Repository<OfferMedia>,
-    @InjectRepository(OfferCategory)
-    private readonly offerCategoriesRepo: Repository<OfferCategory>,
-    @InjectRepository(Partner)
-    private readonly partnersRepo: Repository<Partner>
+    @InjectRepository(FavoriteOffer)
+    private readonly favoriteOffersRepo: Repository<FavoriteOffer>,
+    @InjectRepository(Redemption)
+    private readonly redemptionsRepo: Repository<Redemption>,
+    @InjectRepository(Review)
+    private readonly reviewsRepo: Repository<Review>
   ) {}
 
   private normalizeEmail(email: string): string {
@@ -104,7 +96,8 @@ export class CatalogRouter {
         if (userWithClerkEmail && userWithClerkEmail.id !== existingByClerkId.id) {
           throw new TRPCError({
             code: "CONFLICT",
-            message: "Another local user already exists with current Clerk email",
+            message:
+              "Another local user already exists with current Clerk email",
           });
         }
 
@@ -172,132 +165,32 @@ export class CatalogRouter {
     return this.usersRepo.save(user);
   }
 
+  private async getCurrentUser(ctx: AuthContextLike): Promise<User> {
+    return this.getOrCreateCurrentUser(ctx);
+  }
+
   private async getFavoriteOfferIdsForUser(userId: string): Promise<string[]> {
-    const rows = await this.favoriteOffersRepo
-      .createQueryBuilder("favorite")
-      .innerJoin(Offer, "offer", "offer.id = favorite.offerId")
-      .where("favorite.userId = :userId", { userId })
-      .andWhere("offer.status = :status", { status: OfferStatus.PUBLISHED })
-      .select(["favorite.offerId"])
-      .orderBy("favorite.createdAt", "DESC")
-      .getMany();
-
-    return rows.map((row) => row.offerId);
-  }
-
-  private async getOfferCoverMap(offerIds: string[]): Promise<Map<string, OfferMedia>> {
-    const uniqueOfferIds = uniqueNonEmptyIds(offerIds);
-
-    if (uniqueOfferIds.length === 0) {
-      return new Map<string, OfferMedia>();
-    }
-
-    const media = await this.offerMediaRepo
-      .createQueryBuilder("media")
-      .distinctOn(["media.offerId"])
-      .where("media.offerId IN (:...offerIds)", { offerIds: uniqueOfferIds })
-      .orderBy("media.offerId", "ASC")
-      .addOrderBy("media.isCover", "DESC")
-      .addOrderBy("media.sortOrder", "ASC")
-      .addOrderBy("media.createdAt", "ASC")
-      .getMany();
-
-    return new Map(media.map((item) => [item.offerId, item]));
-  }
-
-  private async getPartnerMap(partnerIds: string[]): Promise<Map<string, Partner>> {
-    const uniquePartnerIds = uniqueNonEmptyIds(partnerIds);
-
-    if (uniquePartnerIds.length === 0) {
-      return new Map<string, Partner>();
-    }
-
-    const partners = await this.partnersRepo
-      .createQueryBuilder("partner")
-      .select(["partner.id", "partner.brandName", "partner.logoUrl"])
-      .where("partner.id IN (:...partnerIds)", { partnerIds: uniquePartnerIds })
-      .getMany();
-
-    return new Map(partners.map((partner) => [partner.id, partner]));
-  }
-
-  private async getCategoryMap(
-    categoryIds: string[]
-  ): Promise<Map<string, OfferCategory>> {
-    const uniqueCategoryIds = uniqueNonEmptyIds(categoryIds);
-
-    if (uniqueCategoryIds.length === 0) {
-      return new Map<string, OfferCategory>();
-    }
-
-    const categories = await this.offerCategoriesRepo
-      .createQueryBuilder("category")
-      .select(["category.id", "category.name", "category.slug"])
-      .where("category.id IN (:...categoryIds)", { categoryIds: uniqueCategoryIds })
-      .getMany();
-
-    return new Map(categories.map((category) => [category.id, category]));
-  }
-
-  private async buildOfferCards(
-    offers: Offer[],
-    favoriteOfferIds: Set<string>
-  ) {
-    const offerIds = offers.map((offer) => offer.id);
-    const partnerIds = uniqueNonEmptyIds(offers.map((offer) => offer.partnerId));
-    const categoryIds = uniqueNonEmptyIds(offers.map((offer) => offer.categoryId));
-
-    const [coverMap, partnerMap, categoryMap] = await Promise.all([
-      this.getOfferCoverMap(offerIds),
-      this.getPartnerMap(partnerIds),
-      this.getCategoryMap(categoryIds),
-    ]);
-
-    return offers.map((offer) => {
-      const cover = coverMap.get(offer.id) ?? null;
-      const partner = partnerMap.get(offer.partnerId) ?? null;
-      const offerCategory = categoryMap.get(offer.categoryId) ?? null;
-
-      return {
-        id: offer.id,
-        slug: offer.slug,
-        title: offer.title,
-        shortDescription: offer.shortDescription,
-        benefitType: offer.benefitType,
-        discountType: offer.discountType,
-        discountValue: offer.discountValue,
-        cashbackPercent: offer.cashbackPercent,
-        bonusRewardPoints: offer.bonusRewardPoints,
-        minPurchaseAmount: offer.minPurchaseAmount,
-        startAt: offer.startAt,
-        endAt: offer.endAt,
-        isFeatured: offer.isFeatured,
-        publishedAt: offer.publishedAt,
-        isFavorite: favoriteOfferIds.has(offer.id),
-        category: offerCategory
-          ? {
-              id: offerCategory.id,
-              name: offerCategory.name,
-              slug: offerCategory.slug,
-            }
-          : null,
-        partner: partner
-          ? {
-              id: partner.id,
-              brandName: partner.brandName,
-              logoUrl: partner.logoUrl,
-            }
-          : null,
-        coverMedia: cover
-          ? {
-              id: cover.id,
-              mediaType: cover.mediaType,
-              fileUrl: cover.fileUrl,
-              isCover: cover.isCover,
-            }
-          : null,
-      };
+    const favorites = await this.favoriteOffersRepo.find({
+      where: { userId },
+      select: { offerId: true },
+      order: { createdAt: "DESC" },
     });
+
+    return favorites.map((favorite) => favorite.offerId);
+  }
+
+  private mapReview(review: Review) {
+    return {
+      id: review.id,
+      userId: review.userId,
+      offerId: review.offerId,
+      redemptionId: review.redemptionId,
+      rating: review.rating,
+      text: review.text,
+      status: review.status,
+      createdAt: review.createdAt,
+      updatedAt: review.updatedAt,
+    };
   }
 
   public readonly router = t.router({
@@ -371,30 +264,25 @@ export class CatalogRouter {
       }),
 
     getFavoriteOfferIds: protectedProcedure.query(async ({ ctx }) => {
-      const user = await this.getOrCreateCurrentUser(ctx);
+      const user = await this.getCurrentUser(ctx);
       return this.getFavoriteOfferIdsForUser(user.id);
     }),
 
     listFavorites: protectedProcedure
       .input(listFavoritesInputSchema)
       .query(async ({ ctx, input }) => {
-        const user = await this.getOrCreateCurrentUser(ctx);
-        const limit = normalizeLimit(input?.limit ?? 24);
-        const offset = normalizeOffset(input?.offset ?? 0);
+        const user = await this.getCurrentUser(ctx);
+        const limit = input?.limit ?? 24;
+        const offset = input?.offset ?? 0;
 
-        const qb = this.favoriteOffersRepo
-          .createQueryBuilder("favorite")
-          .innerJoin(Offer, "offer", "offer.id = favorite.offerId")
-          .where("favorite.userId = :userId", { userId: user.id })
-          .andWhere("offer.status = :status", { status: OfferStatus.PUBLISHED })
-          .orderBy("favorite.createdAt", "DESC")
-          .skip(offset)
-          .take(limit);
+        const [favorites, total] = await this.favoriteOffersRepo.findAndCount({
+          where: { userId: user.id },
+          order: { createdAt: "DESC" },
+          take: limit,
+          skip: offset,
+        });
 
-        const [favorites, total] = await qb.getManyAndCount();
-        const offerIds = favorites.map((favorite) => favorite.offerId);
-
-        if (offerIds.length === 0) {
+        if (favorites.length === 0) {
           return {
             total,
             limit,
@@ -403,28 +291,33 @@ export class CatalogRouter {
           };
         }
 
-        const offers = await this.offersRepo.find({
-          where: {
-            id: In(offerIds),
-            status: OfferStatus.PUBLISHED,
-          },
+        const catalogOffers = await this.catalogService.listOffers({
+          limit: 50,
+          offset: 0,
         });
 
-        const offerMap = new Map(offers.map((offer) => [offer.id, offer]));
-        const sortedOffers = offerIds
-          .map((offerId) => offerMap.get(offerId))
-          .filter((offer): offer is Offer => Boolean(offer));
-
-        const cards = await this.buildOfferCards(
-          sortedOffers,
-          new Set(offerIds)
+        const catalogOfferMap = new Map(
+          catalogOffers.items.map((offer) => [offer.id, offer])
         );
 
         return {
           total,
           limit,
           offset,
-          items: cards,
+          items: favorites
+            .map((favorite) => {
+              const offer = catalogOfferMap.get(favorite.offerId);
+
+              if (!offer) {
+                return null;
+              }
+
+              return {
+                ...offer,
+                favoritedAt: favorite.createdAt,
+              };
+            })
+            .filter((item): item is NonNullable<typeof item> => Boolean(item)),
         };
       }),
 
@@ -435,26 +328,23 @@ export class CatalogRouter {
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const user = await this.getOrCreateCurrentUser(ctx);
+        const user = await this.getCurrentUser(ctx);
 
         const offer = await this.offersRepo.findOne({
-          where: {
-            id: input.offerId,
-            status: OfferStatus.PUBLISHED,
-          },
+          where: { id: input.offerId },
         });
 
         if (!offer) {
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Published offer not found",
+            message: "Offer not found",
           });
         }
 
         const existing = await this.favoriteOffersRepo.findOne({
           where: {
             userId: user.id,
-            offerId: offer.id,
+            offerId: input.offerId,
           },
         });
 
@@ -462,26 +352,146 @@ export class CatalogRouter {
           await this.favoriteOffersRepo.delete(existing.id);
 
           return {
-            offerId: offer.id,
+            offerId: input.offerId,
             isFavorite: false,
           };
         }
 
-        await this.favoriteOffersRepo
-          .createQueryBuilder()
-          .insert()
-          .into(FavoriteOffer)
-          .values({
-            userId: user.id,
-            offerId: offer.id,
-          })
-          .orIgnore()
-          .execute();
+        const created = this.favoriteOffersRepo.create({
+          userId: user.id,
+          offerId: input.offerId,
+        });
+
+        await this.favoriteOffersRepo.save(created);
 
         return {
-          offerId: offer.id,
+          offerId: input.offerId,
           isFavorite: true,
         };
+      }),
+
+    getMyReviewEligibility: protectedProcedure
+      .input(
+        z.object({
+          offerId: z.string().uuid(),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        const user = await this.getCurrentUser(ctx);
+
+        const redemptions = await this.redemptionsRepo.find({
+          where: {
+            userId: user.id,
+            offerId: input.offerId,
+            status: RedemptionStatus.USED,
+          },
+          order: {
+            usedAt: "DESC",
+            createdAt: "DESC",
+          },
+        });
+
+        const redemptionIds = redemptions.map((redemption) => redemption.id);
+        const reviews = redemptionIds.length
+          ? await this.reviewsRepo.find({
+              where: {
+                userId: user.id,
+                offerId: input.offerId,
+                redemptionId: In(redemptionIds),
+              },
+            })
+          : [];
+
+        const reviewsByRedemptionId = new Map(
+          reviews.map((review) => [review.redemptionId, review])
+        );
+
+        const usedRedemptions = redemptions.map((redemption) => {
+          const review = reviewsByRedemptionId.get(redemption.id) ?? null;
+
+          return {
+            id: redemption.id,
+            status: redemption.status,
+            usedAt: redemption.usedAt,
+            createdAt: redemption.createdAt,
+            hasReview: Boolean(review),
+            review: review ? this.mapReview(review) : null,
+          };
+        });
+
+        const reviewableRedemption = usedRedemptions.find(
+          (redemption) => !redemption.hasReview
+        );
+
+        return {
+          canReview: Boolean(reviewableRedemption),
+          reviewableRedemptionId: reviewableRedemption?.id ?? null,
+          usedCount: usedRedemptions.length,
+          reviewedCount: reviews.length,
+          usedRedemptions,
+        };
+      }),
+
+    createReview: protectedProcedure
+      .input(
+        z.object({
+          redemptionId: z.string().uuid(),
+          rating: z.number().int().min(1).max(5),
+          text: z.string().trim().max(1000).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const user = await this.getCurrentUser(ctx);
+
+        const redemption = await this.redemptionsRepo.findOne({
+          where: {
+            id: input.redemptionId,
+            userId: user.id,
+          },
+        });
+
+        if (!redemption) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Used redemption not found for current user",
+          });
+        }
+
+        if (redemption.status !== RedemptionStatus.USED) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Review can be created only after QR usage is confirmed",
+          });
+        }
+
+        const existing = await this.reviewsRepo.findOne({
+          where: {
+            redemptionId: redemption.id,
+          },
+        });
+
+        if (existing) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Review already exists for this redemption",
+          });
+        }
+
+        const review = this.reviewsRepo.create({
+          userId: user.id,
+          offerId: redemption.offerId,
+          redemptionId: redemption.id,
+          rating: input.rating,
+          text: normalizeNullableText(input.text),
+          status: ReviewStatus.VISIBLE,
+          moderatedByUserId: null,
+          moderatedAt: null,
+          moderationComment: null,
+        });
+
+        const saved = await this.reviewsRepo.save(review);
+
+        return this.mapReview(saved);
       }),
   });
 }
