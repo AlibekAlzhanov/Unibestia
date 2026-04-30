@@ -727,6 +727,15 @@ export default function PartnerOfferDetailPage(): JSX.Element {
                 </button>
               )}
 
+              {canSubmitForReview(offer.status) && (
+                <Link
+                  href={`/partner/offers/${offer.id}/edit`}
+                  className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-center text-sm font-black text-white transition hover:bg-white/15"
+                >
+                  Редактировать
+                </Link>
+              )}
+
               <Link
                 href="/partner/requests"
                 className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-center text-sm font-black text-white transition hover:bg-white/15"
@@ -1039,6 +1048,15 @@ export default function PartnerOfferDetailPage(): JSX.Element {
               >
                 Создать новую
               </Link>
+
+              {canSubmitForReview(offer.status) && (
+                <Link
+                  href={`/partner/offers/${offer.id}/edit`}
+                  className="rounded-2xl border border-[#D8E3DE] bg-white px-5 py-3 text-center text-sm font-black text-[#17384B] transition hover:border-[#FFB5A4] hover:bg-[#F7F6F1]"
+                >
+                  Редактировать
+                </Link>
+              )}
 
               <Link
                 href="/partner/analytics"

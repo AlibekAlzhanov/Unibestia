@@ -1741,6 +1741,281 @@ export class BusinessRouter {
           };
         }),
 
+
+      updateOffer: protectedProcedure
+        .input(
+          z.object({
+            offerId: z.string().uuid(),
+            categoryId: z.string().uuid(),
+            title: z.string().trim().min(3).max(255),
+            shortDescription: z.string().trim().max(500).optional(),
+            description: z.string().trim().min(10),
+            terms: z.string().trim().max(2000).optional(),
+            benefitType: z
+              .enum(["discount", "bonus", "cashback", "mixed"])
+              .default("discount"),
+            discountType: z.enum(["percent", "fixed_amount"]).default("percent"),
+            discountValue: z.number().min(0).optional(),
+            cashbackPercent: z.number().min(0).max(100).optional(),
+            bonusRewardPoints: z.number().int().min(0).optional(),
+            minPurchaseAmount: z.number().min(0).optional(),
+            usageLimitPerUser: z.number().int().min(1).optional(),
+            totalUsageLimit: z.number().int().min(1).optional(),
+            startAt: z.string().datetime().optional(),
+            endAt: z.string().datetime().optional(),
+            locationIds: z.array(z.string().uuid()).optional().default([]),
+            submitForReview: z.boolean().default(false),
+          })
+        )
+        .mutation(async ({ ctx, input }) => {
+          const { user, partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerManageAccess(membership);
+
+          const offer = await this.offersRepo.findOne({
+            where: { id: input.offerId, partnerId: partner.id },
+          });
+
+          if (!offer) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Offer not found",
+            });
+          }
+
+          if (
+            offer.status !== OfferStatus.DRAFT &&
+            offer.status !== OfferStatus.REJECTED
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Only draft or rejected offers can be edited",
+            });
+          }
+
+          const category = await this.offerCategoriesRepo.findOne({
+            where: { id: input.categoryId, isActive: true },
+          });
+
+          if (!category) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Offer category not found",
+            });
+          }
+
+          const isDiscountBenefit =
+            input.benefitType === "discount" || input.benefitType === "mixed";
+          const isCashbackBenefit =
+            input.benefitType === "cashback" || input.benefitType === "mixed";
+          const isBonusBenefit =
+            input.benefitType === "bonus" || input.benefitType === "mixed";
+
+          if (
+            input.benefitType === "discount" &&
+            typeof input.discountValue !== "number"
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Discount value is required for discount offers",
+            });
+          }
+
+          if (
+            input.benefitType === "cashback" &&
+            typeof input.cashbackPercent !== "number"
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Cashback percent is required for cashback offers",
+            });
+          }
+
+          if (
+            input.benefitType === "bonus" &&
+            typeof input.bonusRewardPoints !== "number"
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Bonus reward points are required for bonus offers",
+            });
+          }
+
+          if (
+            input.benefitType === "mixed" &&
+            typeof input.discountValue !== "number" &&
+            typeof input.cashbackPercent !== "number" &&
+            typeof input.bonusRewardPoints !== "number"
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "Mixed offer must include at least one benefit: discount, cashback, or bonus",
+            });
+          }
+
+          const startAt = input.startAt ? new Date(input.startAt) : offer.startAt;
+          const endAt = input.endAt ? new Date(input.endAt) : null;
+
+          if (endAt && endAt <= startAt) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "End date must be later than start date",
+            });
+          }
+
+          const selectedLocations =
+            input.locationIds.length > 0
+              ? await this.partnerLocationsRepo.find({
+                  where: {
+                    id: In(input.locationIds),
+                    partnerId: partner.id,
+                    isActive: true,
+                  },
+                })
+              : await this.partnerLocationsRepo.find({
+                  where: {
+                    partnerId: partner.id,
+                    isActive: true,
+                  },
+                });
+
+          if (
+            input.locationIds.length > 0 &&
+            selectedLocations.length !== input.locationIds.length
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "One or more selected locations do not belong to this partner",
+            });
+          }
+
+          const previousStatus = offer.status;
+          const previousTitle = offer.title;
+
+          offer.categoryId = category.id;
+          offer.title = input.title;
+          offer.shortDescription = input.shortDescription ?? null;
+          offer.description = input.description;
+          offer.terms = input.terms ?? null;
+          offer.benefitType = input.benefitType as OfferBenefitType;
+          offer.discountType = isDiscountBenefit
+            ? (input.discountType as OfferDiscountType)
+            : null;
+          offer.discountValue =
+            isDiscountBenefit && typeof input.discountValue === "number"
+              ? input.discountValue.toFixed(2)
+              : null;
+          offer.cashbackPercent =
+            isCashbackBenefit && typeof input.cashbackPercent === "number"
+              ? input.cashbackPercent.toFixed(2)
+              : null;
+          offer.bonusRewardPoints = isBonusBenefit
+            ? input.bonusRewardPoints ?? null
+            : null;
+          offer.minPurchaseAmount =
+            typeof input.minPurchaseAmount === "number"
+              ? input.minPurchaseAmount.toFixed(2)
+              : null;
+          offer.usageLimitPerUser = input.usageLimitPerUser ?? null;
+          offer.totalUsageLimit = input.totalUsageLimit ?? null;
+          offer.startAt = startAt;
+          offer.endAt = endAt;
+          offer.status = input.submitForReview
+            ? OfferStatus.PENDING_REVIEW
+            : OfferStatus.DRAFT;
+          offer.publishedAt = null;
+          offer.updatedByUserId = user.id;
+
+          const saved = await this.offersRepo.save(offer);
+
+          await this.offerLocationsRepo.delete({ offerId: saved.id });
+
+          if (selectedLocations.length > 0) {
+            await this.offerLocationsRepo.save(
+              selectedLocations.map((location) =>
+                this.offerLocationsRepo.create({
+                  offerId: saved.id,
+                  locationId: location.id,
+                })
+              )
+            );
+          }
+
+          await this.writeBusinessAuditLog({
+            actorUserId: user.id,
+            actorRole: membership.memberRole,
+            action: "offer.updated",
+            entityType: "offer",
+            entityId: saved.id,
+            partnerId: partner.id,
+            metadata: {
+              previousTitle,
+              title: saved.title,
+              slug: saved.slug,
+              previousStatus,
+              newStatus: saved.status,
+              categoryId: saved.categoryId,
+              locationIds: selectedLocations.map((location) => location.id),
+              submitForReview: input.submitForReview,
+            },
+          });
+
+          if (saved.status === OfferStatus.PENDING_REVIEW) {
+            await this.writeBusinessAuditLog({
+              actorUserId: user.id,
+              actorRole: membership.memberRole,
+              action: "offer.submitted_for_review",
+              entityType: "offer",
+              entityId: saved.id,
+              partnerId: partner.id,
+              metadata: {
+                title: saved.title,
+                slug: saved.slug,
+                source: "update_offer",
+                previousStatus,
+                newStatus: saved.status,
+              },
+            });
+
+            await this.createModerationTaskIfMissing({
+              entityType: ModerationEntityType.OFFER,
+              entityId: saved.id,
+              actorUserId: user.id,
+              actorRole: membership.memberRole,
+              partnerId: partner.id,
+              metadata: {
+                title: saved.title,
+                slug: saved.slug,
+                source: "update_offer",
+                previousStatus,
+                newStatus: saved.status,
+              },
+            });
+          }
+
+          return {
+            id: saved.id,
+            title: saved.title,
+            slug: saved.slug,
+            status: saved.status,
+            category: {
+              id: category.id,
+              name: category.name,
+              slug: category.slug,
+            },
+            partner: {
+              id: partner.id,
+              brandName: partner.brandName,
+            },
+            locations: selectedLocations.map((location) => ({
+              id: location.id,
+              name: location.name,
+              city: location.city,
+              address: location.address,
+            })),
+          };
+        }),
       submitOfferForReview: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
         .mutation(async ({ ctx, input }) => {
