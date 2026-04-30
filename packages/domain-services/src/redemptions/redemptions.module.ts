@@ -10,11 +10,13 @@ import {
   StudentProfile,
   User,
 } from "@repo/db";
+import { WalletsModule } from "../wallets/wallets.module.js";
 import { RedemptionsRepository } from "./repositories/redemptions.repository.js";
 import { RedemptionsService } from "./services/redemptions.service.js";
 
 @Module({
   imports: [
+    WalletsModule,
     TypeOrmModule.forFeature([
       AuditLog,
       Redemption,

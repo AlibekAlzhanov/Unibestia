@@ -11,6 +11,7 @@ import {
   RedemptionStatus,
   StudentVerificationStatus,
 } from "@repo/db";
+import { WalletsService } from "../../wallets/services/wallets.service.js";
 import { RedemptionsRepository } from "../repositories/redemptions.repository.js";
 
 export interface CreateRedemptionInput {
@@ -48,7 +49,9 @@ const QR_TOKEN_TTL_MINUTES = 5;
 export class RedemptionsService {
   constructor(
     @Inject(RedemptionsRepository)
-    private readonly redemptionsRepository: RedemptionsRepository
+    private readonly redemptionsRepository: RedemptionsRepository,
+    @Inject(WalletsService)
+    private readonly walletsService: WalletsService
   ) {}
 
   async createRedemption(input: CreateRedemptionInput) {
@@ -61,7 +64,9 @@ export class RedemptionsService {
 
     const now = new Date();
 
-    if (studentProfile.verificationStatus !== StudentVerificationStatus.VERIFIED) {
+    if (
+      studentProfile.verificationStatus !== StudentVerificationStatus.VERIFIED
+    ) {
       throw new BadRequestException("Student verification is required");
     }
 
@@ -150,18 +155,18 @@ export class RedemptionsService {
     });
 
     await this.writeRedemptionAuditLog({
-    action: "redemption.created",
-    actorUserId: input.userId,
-    actorRole: "student",
-    redemptionId: redemption.id,
-    partnerId: redemption.partnerId,
-    metadata: {
-      offerId: redemption.offerId,
-      locationId: redemption.locationId,
-      qrExpiresAt: redemption.qrExpiresAt?.toISOString() ?? null,
-      ttlSeconds: QR_TOKEN_TTL_MINUTES * 60,
-    },
-  });
+      action: "redemption.created",
+      actorUserId: input.userId,
+      actorRole: "student",
+      redemptionId: redemption.id,
+      partnerId: redemption.partnerId,
+      metadata: {
+        offerId: redemption.offerId,
+        locationId: redemption.locationId,
+        qrExpiresAt: redemption.qrExpiresAt?.toISOString() ?? null,
+        ttlSeconds: QR_TOKEN_TTL_MINUTES * 60,
+      },
+    });
 
     return {
       id: redemption.id,
@@ -242,10 +247,25 @@ export class RedemptionsService {
       redemption.discountAmount = input.discountAmount.toFixed(2);
     }
 
+    const offer = await this.redemptionsRepository.findOfferById(
+      redemption.offerId
+    );
+
+    const rewardPoints = this.calculateRewardPoints(offer, input.orderAmount);
+
+    redemption.bonusEarned = rewardPoints;
     redemption.status = RedemptionStatus.USED;
     redemption.usedAt = new Date();
 
     const saved = await this.redemptionsRepository.saveRedemption(redemption);
+
+    const walletReward = await this.walletsService.earnRedemptionReward({
+      userId: saved.userId,
+      redemptionId: saved.id,
+      points: rewardPoints,
+      offerTitle: offer?.title ?? null,
+    });
+
     await this.writeRedemptionAuditLog({
       action: "redemption.confirmed",
       actorUserId: input.operatorUserId,
@@ -257,10 +277,13 @@ export class RedemptionsService {
         locationId: saved.locationId,
         orderAmount: saved.orderAmount,
         discountAmount: saved.discountAmount,
+        bonusEarned: saved.bonusEarned,
+        walletReward,
         operatorPartnerId: input.operatorPartnerId,
         isAdmin: input.isAdmin,
       },
     });
+
     return this.buildStaffRedemptionResponse(saved);
   }
 
@@ -271,6 +294,7 @@ export class RedemptionsService {
     redemption.cancelledAt = new Date();
 
     const saved = await this.redemptionsRepository.saveRedemption(redemption);
+
     await this.writeRedemptionAuditLog({
       action: "redemption.cancelled",
       actorUserId: input.operatorUserId,
@@ -284,6 +308,7 @@ export class RedemptionsService {
         isAdmin: input.isAdmin,
       },
     });
+
     return this.buildStaffRedemptionResponse(saved);
   }
 
@@ -313,7 +338,7 @@ export class RedemptionsService {
       items: items.map((item) => {
         const offer = offersMap.get(item.offerId) ?? null;
         const location = item.locationId
-          ? (locationsMap.get(item.locationId) ?? null)
+          ? locationsMap.get(item.locationId) ?? null
           : null;
 
         return {
@@ -363,13 +388,14 @@ export class RedemptionsService {
     const offersMap = await this.redemptionsRepository.getOffersMap([
       item.offerId,
     ]);
+
     const locationsMap = await this.redemptionsRepository.getPartnerLocationsMap(
       item.locationId ? [item.locationId] : []
     );
 
     const offer = offersMap.get(item.offerId) ?? null;
     const location = item.locationId
-      ? (locationsMap.get(item.locationId) ?? null)
+      ? locationsMap.get(item.locationId) ?? null
       : null;
 
     return {
@@ -455,6 +481,30 @@ export class RedemptionsService {
     if (offer.endAt && offer.endAt < now) {
       throw new BadRequestException("Offer has expired");
     }
+  }
+
+  private calculateRewardPoints(
+    offer: Offer | null,
+    orderAmount?: number
+  ): number {
+    if (!offer) {
+      return 0;
+    }
+
+    const bonusPoints = offer.bonusRewardPoints ?? 0;
+    const cashbackPercent = Number(offer.cashbackPercent ?? 0);
+
+    const cashbackBase =
+      typeof orderAmount === "number" && Number.isFinite(orderAmount)
+        ? orderAmount
+        : Number(offer.minPurchaseAmount ?? 0);
+
+    const cashbackPoints =
+      cashbackPercent > 0 && cashbackBase > 0
+        ? Math.floor((cashbackBase * cashbackPercent) / 100)
+        : 0;
+
+    return Math.max(0, bonusPoints + cashbackPoints);
   }
 
   private async assertOperatorCanAccessRedemption(
@@ -628,7 +678,7 @@ export class RedemptionsService {
     const user = usersMap.get(redemption.userId) ?? null;
     const partner = partnersMap.get(redemption.partnerId) ?? null;
     const location = redemption.locationId
-      ? (locationsMap.get(redemption.locationId) ?? null)
+      ? locationsMap.get(redemption.locationId) ?? null
       : null;
 
     return {

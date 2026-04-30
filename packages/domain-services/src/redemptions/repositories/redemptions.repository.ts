@@ -25,6 +25,7 @@ export type CreateAuditLogInput = {
   ipAddress?: string | null;
   userAgent?: string | null;
 };
+
 @Injectable()
 export class RedemptionsRepository {
   constructor(
@@ -79,7 +80,9 @@ export class RedemptionsRepository {
     });
   }
 
-  async findStudentProfileByUserId(userId: string): Promise<StudentProfile | null> {
+  async findStudentProfileByUserId(
+    userId: string
+  ): Promise<StudentProfile | null> {
     return this.studentProfilesRepo.findOne({
       where: { userId },
     });
@@ -90,10 +93,7 @@ export class RedemptionsRepository {
       where: {
         userId,
         offerId,
-        status: In([
-          RedemptionStatus.CONFIRMED,
-          RedemptionStatus.USED,
-        ]),
+        status: In([RedemptionStatus.CONFIRMED, RedemptionStatus.USED]),
       },
     });
   }
@@ -102,10 +102,7 @@ export class RedemptionsRepository {
     return this.redemptionsRepo.count({
       where: {
         offerId,
-        status: In([
-          RedemptionStatus.CONFIRMED,
-          RedemptionStatus.USED,
-        ]),
+        status: In([RedemptionStatus.CONFIRMED, RedemptionStatus.USED]),
       },
     });
   }
