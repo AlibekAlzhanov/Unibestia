@@ -1,0 +1,40 @@
+---
+description: UniBestia UI polish rules
+globs:
+  - "apps/web/**/*"
+  - "apps/business-web/**/*"
+  - "packages/ui/**/*"
+alwaysApply: true
+---
+
+You are working on the UniBestia project.
+
+Important constraints:
+- Do not touch apps/mobile.
+- Do not remove or disable R2.
+- Do not remove or disable Clerk.
+- Do not remove or disable Redis.
+- Do not rewrite backend business logic unless explicitly requested.
+- Prefer small, safe, reviewable changes.
+- Use TypeScript strictly.
+- Keep the existing Turborepo architecture.
+
+UI brand:
+- Background: #F7F6F1
+- Main text: #17384B
+- Accent: #FF9F8A
+- Use rounded-[28px] / rounded-[32px]
+- Use soft shadows
+- Use pastel SaaS style
+- Use responsive layouts
+- Use accessible buttons and loading states.
+
+For UI polish tasks:
+- Prefer reusable components in packages/ui.
+- Add skeleton loaders instead of plain loading text.
+- Add ButtonLoader for async buttons.
+- Add PageTransition for major pages.
+- Add AnimatedCard for cards.
+- Add EmptyState for empty lists.
+- Add StatusBadge for statuses.
+- Do not change tRPC procedure names or backend API contracts.

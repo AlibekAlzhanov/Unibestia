@@ -1,0 +1,26 @@
+# secrets
+.env
+.env.*
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/credentials.json
+**/secrets.json
+
+# dependencies/build
+node_modules/
+.pnpm-store/
+.next/
+dist/
+build/
+coverage/
+.turbo/
+.expo/
+
+# do not touch mobile
+apps/mobile/
+
+# generated/cache
+*.tsbuildinfo
+*.log

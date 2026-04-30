@@ -37,6 +37,10 @@ const nextConfig = {
         hostname: "api.qrserver.com",
       },
       {
+        protocol: "https",
+        hostname: "placehold.co",
+      },
+      {
         protocol: "http",
         hostname: "localhost",
         port: "3001",
