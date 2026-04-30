@@ -113,6 +113,89 @@ function useIsMobileViewport(): boolean {
   return isMobile;
 }
 
+function LoadingOfferDetails(): JSX.Element {
+  return (
+    <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1120px] flex-col gap-6 px-4 py-8 md:px-6 lg:px-8">
+      <div className="ub-skeleton h-5 w-40 rounded-full" />
+
+      <div className="grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
+        <section className="ub-card rounded-[34px] p-5">
+          <div className="ub-skeleton h-72 rounded-[28px] md:h-96" />
+          <div className="mt-6 space-y-3">
+            <div className="ub-skeleton h-4 w-40 rounded-full" />
+            <div className="ub-skeleton h-8 w-4/5 rounded-full" />
+            <div className="ub-skeleton h-4 w-full rounded-full" />
+            <div className="ub-skeleton h-4 w-2/3 rounded-full" />
+          </div>
+        </section>
+
+        <aside className="flex flex-col gap-4">
+          <div className="ub-card rounded-[30px] p-6">
+            <div className="ub-skeleton h-16 w-16 rounded-3xl" />
+            <div className="ub-skeleton mt-4 h-5 w-3/4 rounded-full" />
+            <div className="ub-skeleton mt-3 h-4 w-full rounded-full" />
+          </div>
+
+          <div className="ub-card rounded-[30px] p-6">
+            <div className="ub-skeleton h-6 w-1/2 rounded-full" />
+            <div className="ub-skeleton mt-5 h-12 w-full rounded-2xl" />
+            <div className="ub-skeleton mt-4 h-40 w-full rounded-[24px]" />
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function NotFoundOfferState(): JSX.Element {
+  return (
+    <div className="mx-auto min-h-[calc(100vh-72px)] max-w-[1000px] px-4 py-10">
+      <div className="ub-card rounded-[34px] p-8 text-center md:p-10">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-[#FFF0EB] text-2xl font-black text-[#FF7F6E]">
+          !
+        </div>
+
+        <h1 className="mt-5 text-2xl font-black text-[#17384B]">
+          Скидка не найдена
+        </h1>
+
+        <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-[#6B7280]">
+          Возможно, предложение ещё не опубликовано, было отключено или ссылка
+          устарела.
+        </p>
+
+        <Link
+          href="/catalog"
+          className="ub-gradient-button mt-6 inline-flex rounded-2xl px-5 py-3 text-sm font-black text-white"
+        >
+          Вернуться в каталог
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function RatingStars({ rating }: { rating: number | null }): JSX.Element {
+  const safeRating = rating ?? 0;
+  const roundedRating = Math.round(safeRating);
+
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <span
+          key={index}
+          className={[
+            "text-lg",
+            index < roundedRating ? "text-[#FF9F8A]" : "text-[#D8E3DE]",
+          ].join(" ")}
+        >
+          ★
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function OfferDetailsPage(): JSX.Element {
   const params = useParams<{ slug: string }>();
   const trpc = useTRPC();
@@ -151,6 +234,7 @@ export default function OfferDetailsPage(): JSX.Element {
 
   const galleryMedia = useMemo(() => {
     const media = offer?.media ?? [];
+
     return coverMedia
       ? media.filter((item) => item.id !== coverMedia.id)
       : media.slice(1);
@@ -163,6 +247,10 @@ export default function OfferDetailsPage(): JSX.Element {
 
     return offer?.locations?.[0]?.id;
   }, [offer?.locations, selectedLocationId]);
+
+  const minPurchaseText = offer?.minPurchaseAmount
+    ? `${Number(offer.minPurchaseAmount).toFixed(0)} ₸`
+    : "Без минимума";
 
   async function createQr(): Promise<void> {
     if (!offer) return;
@@ -197,73 +285,53 @@ export default function OfferDetailsPage(): JSX.Element {
   }
 
   if (offerQuery.isLoading) {
-    return (
-      <div className="mx-auto min-h-[calc(100vh-72px)] max-w-[1000px] px-4 py-10">
-        <div className="rounded-3xl bg-white p-8 text-[#6B7280]">
-          Загружаем карточку скидки...
-        </div>
-      </div>
-    );
+    return <LoadingOfferDetails />;
   }
 
   if (offerQuery.error || !offer) {
-    return (
-      <div className="mx-auto min-h-[calc(100vh-72px)] max-w-[1000px] px-4 py-10">
-        <div className="rounded-3xl bg-white p-8">
-          <h1 className="text-2xl font-bold text-[#17384B]">
-            Скидка не найдена
-          </h1>
-          <p className="mt-2 text-[#6B7280]">
-            Возможно, предложение ещё не опубликовано или было отключено.
-          </p>
-          <Link
-            href="/catalog"
-            className="mt-5 inline-flex rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-bold text-white"
-          >
-            Вернуться в каталог
-          </Link>
-        </div>
-      </div>
-    );
+    return <NotFoundOfferState />;
   }
 
   return (
-    <div className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1120px] px-4 py-8 md:px-6 lg:px-8">
+    <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1180px] flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
       <Link
         href="/catalog"
-        className="mb-5 inline-flex text-sm font-bold text-[#FF7F6E]"
+        className="inline-flex w-fit items-center rounded-2xl bg-white px-4 py-2 text-sm font-black text-[#FF7F6E] shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:bg-[#FFF0EB]"
       >
         ← Назад в каталог
       </Link>
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_0.8fr]">
-        <section className="overflow-hidden rounded-[32px] bg-white shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-          {coverMedia?.fileUrl ? (
-            <div className="relative h-72 w-full md:h-96">
-              <Image
-                src={coverMedia.fileUrl}
-                alt={offer.title}
-                fill
-                priority
-                sizes="(max-width: 1024px) 100vw, 720px"
-                className="object-cover"
-              />
-            </div>
-          ) : (
-            <div className="flex h-72 items-center justify-center bg-gradient-to-br from-[#17384B] to-[#FF9F8A] text-center text-sm font-black uppercase tracking-[0.24em] text-white md:h-96">
-              UniBestia Offer
-            </div>
-          )}
+      <div className="grid gap-6 lg:grid-cols-[1.35fr_0.85fr] lg:items-start">
+        <section className="ub-animate-fade-up overflow-hidden rounded-[36px] border border-[#E5ECE9] bg-white shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
+          <div className="relative">
+            {coverMedia?.fileUrl ? (
+              <div className="relative h-72 w-full overflow-hidden bg-[#F7F6F1] md:h-[440px]">
+                <Image
+                  src={coverMedia.fileUrl}
+                  alt={offer.title}
+                  fill
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 760px"
+                  className="object-cover"
+                />
 
-          <div className="p-7">
-            <div className="mb-5 flex flex-wrap items-center gap-2">
+                <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/55 via-black/20 to-transparent" />
+              </div>
+            ) : (
+              <div className="flex h-72 items-center justify-center bg-[linear-gradient(135deg,#17384B_0%,#255B73_45%,#FF9F8A_100%)] text-center text-sm font-black uppercase tracking-[0.24em] text-white md:h-[440px]">
+                UniBestia Offer
+              </div>
+            )}
+
+            <div className="absolute bottom-5 left-5 right-5 flex flex-wrap items-center gap-2">
               {offer.category && (
-                <span className="rounded-2xl bg-[#F7F6F1] px-3 py-1 text-xs font-bold text-[#526470]">
+                <span className="rounded-2xl border border-white/20 bg-white/90 px-3 py-1 text-xs font-black text-[#17384B] backdrop-blur-md">
                   {offer.category.name}
                 </span>
               )}
+
               {offer.partner && (
-                <span className="inline-flex items-center gap-2 rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-bold text-[#FF7F6E]">
+                <span className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/90 px-3 py-1 text-xs font-black text-[#FF7F6E] backdrop-blur-md">
                   {offer.partner.logoUrl && (
                     <Image
                       src={offer.partner.logoUrl}
@@ -278,47 +346,62 @@ export default function OfferDetailsPage(): JSX.Element {
                 </span>
               )}
             </div>
+          </div>
 
-            <h1 className="text-3xl font-bold tracking-tight text-[#17384B] md:text-4xl">
-              {offer.title}
-            </h1>
+          <div className="p-5 md:p-7">
+            <div className="grid gap-5 lg:grid-cols-[1fr_220px] lg:items-start">
+              <div>
+                <h1 className="text-[30px] font-black leading-tight tracking-[-0.04em] text-[#17384B] md:text-4xl">
+                  {offer.title}
+                </h1>
 
-            {offer.shortDescription && (
-              <p className="mt-4 text-lg leading-8 text-[#526470]">
-                {offer.shortDescription}
-              </p>
-            )}
-
-            <div className="mt-6 rounded-[28px] bg-[#17384B] p-6 text-white">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#FFB5A4]">
-                Выгода
-              </p>
-              <div className="mt-2 text-5xl font-black">
-                {formatBenefit(offer)}
+                {offer.shortDescription && (
+                  <p className="mt-4 text-base leading-8 text-[#526470] md:text-lg">
+                    {offer.shortDescription}
+                  </p>
+                )}
               </div>
-              {offer.minPurchaseAmount && (
-                <p className="mt-3 text-sm text-[#DDE8EA]">
-                  Минимальная сумма покупки:{" "}
-                  {Number(offer.minPurchaseAmount).toFixed(0)} ₸
+
+              <div className="rounded-[28px] bg-[linear-gradient(135deg,#17384B_0%,#255B73_58%,#FF9F8A_150%)] p-5 text-white shadow-[0_18px_42px_rgba(23,56,75,0.2)]">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-[#FFB5A4]">
+                  Выгода
                 </p>
-              )}
+
+                <div className="mt-2 text-4xl font-black">
+                  {formatBenefit(offer)}
+                </div>
+
+                <p className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-[#DDE8EA]">
+                  Минимум: {minPurchaseText}
+                </p>
+              </div>
             </div>
 
             {galleryMedia.length > 0 && (
-              <div className="mt-7">
-                <h2 className="text-xl font-bold text-[#17384B]">Фото</h2>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="mt-8">
+                <div className="flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+                      Галерея
+                    </p>
+                    <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+                      Фото предложения
+                    </h2>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {galleryMedia.map((item) => (
                     <div
                       key={item.id}
-                      className="relative h-44 w-full overflow-hidden rounded-[24px]"
+                      className="group relative h-44 w-full overflow-hidden rounded-[24px] bg-[#F7F6F1]"
                     >
                       <Image
                         src={item.fileUrl}
                         alt={offer.title}
                         fill
                         sizes="(max-width: 768px) 100vw, 50vw"
-                        className="object-cover"
+                        className="ub-image-lift object-cover"
                       />
                     </div>
                   ))}
@@ -326,27 +409,34 @@ export default function OfferDetailsPage(): JSX.Element {
               </div>
             )}
 
-            <div className="mt-7">
-              <h2 className="text-xl font-bold text-[#17384B]">Описание</h2>
-              <p className="mt-3 whitespace-pre-line leading-7 text-[#526470]">
-                {offer.description}
-              </p>
-            </div>
+            <div className="mt-8 grid gap-4 md:grid-cols-2">
+              <div className="rounded-[28px] border border-[#E5ECE9] bg-[#F9FAF8] p-5">
+                <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+                  Описание
+                </p>
 
-            {offer.terms && (
-              <div className="mt-7 rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5">
-                <h2 className="text-lg font-bold text-[#17384B]">Условия</h2>
-                <p className="mt-2 whitespace-pre-line leading-7 text-[#526470]">
-                  {offer.terms}
+                <p className="mt-3 whitespace-pre-line text-sm leading-7 text-[#526470]">
+                  {offer.description || "Описание предложения пока не указано."}
                 </p>
               </div>
-            )}
+
+              <div className="rounded-[28px] border border-[#E5ECE9] bg-[#FFF7F4] p-5">
+                <p className="text-sm font-black uppercase tracking-[0.2em] text-[#FF7F6E]">
+                  Условия
+                </p>
+
+                <p className="mt-3 whitespace-pre-line text-sm leading-7 text-[#526470]">
+                  {offer.terms ||
+                    "Условия использования скидки уточняются у партнёра."}
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
-        <aside className="flex flex-col gap-4">
+        <aside className="ub-animate-fade-up ub-delay-100 flex flex-col gap-4 lg:sticky lg:top-[92px]">
           {offer.partner && (
-            <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
+            <div className="ub-card rounded-[30px] p-6">
               <div className="flex items-center gap-4">
                 {offer.partner.logoUrl ? (
                   <Image
@@ -362,39 +452,76 @@ export default function OfferDetailsPage(): JSX.Element {
                     {offer.partner.brandName.slice(0, 1).toUpperCase()}
                   </div>
                 )}
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9CA3AF]">
+
+                <div className="min-w-0">
+                  <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
                     Партнёр
                   </p>
-                  <h2 className="text-xl font-bold text-[#17384B]">
+
+                  <h2 className="truncate text-xl font-black text-[#17384B]">
                     {offer.partner.brandName}
                   </h2>
                 </div>
               </div>
+
               {offer.partner.description && (
                 <p className="mt-4 text-sm leading-6 text-[#6B7280]">
                   {offer.partner.description}
                 </p>
               )}
+
+              <div className="mt-5 grid gap-2">
+                {offer.partner.contactEmail && (
+                  <a
+                    href={`mailto:${offer.partner.contactEmail}`}
+                    className="rounded-2xl bg-[#F7F6F1] px-4 py-3 text-sm font-bold text-[#17384B] transition hover:bg-[#FFF0EB]"
+                  >
+                    {offer.partner.contactEmail}
+                  </a>
+                )}
+
+                {offer.partner.websiteUrl && (
+                  <a
+                    href={offer.partner.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-2xl bg-[#F7F6F1] px-4 py-3 text-sm font-bold text-[#17384B] transition hover:bg-[#FFF0EB]"
+                  >
+                    Сайт партнёра →
+                  </a>
+                )}
+              </div>
             </div>
           )}
 
-          <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-            <h2 className="text-xl font-bold text-[#17384B]">
-              Получить скидку
-            </h2>
+          <div className="rounded-[30px] border border-[#E5ECE9] bg-white p-6 shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FF7F6E]">
+                  QR-активация
+                </p>
+
+                <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+                  Получить скидку
+                </h2>
+              </div>
+
+              <span className="rounded-2xl bg-[#FFF0EB] px-3 py-2 text-sm font-black text-[#FF7F6E]">
+                {formatBenefit(offer)}
+              </span>
+            </div>
 
             {profileQuery.isLoading ? (
-              <p className="mt-2 text-sm leading-6 text-[#6B7280]">
+              <div className="mt-5 rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] p-4 text-sm leading-6 text-[#6B7280]">
                 Проверяем студенческий домен...
-              </p>
+              </div>
             ) : isAllowedStudentEmail ? (
-              <div className="mt-3 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
+              <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
                 Студенческий домен разрешён:{" "}
                 {profileQuery.data?.allowedStudentEmailDomain.domain}
               </div>
             ) : (
-              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
                 QR доступен только студентам с разрешённой студенческой почтой.
                 Для Satbayev используйте email{" "}
                 <span className="font-mono">name@stud.satbayev.university</span>.
@@ -408,21 +535,22 @@ export default function OfferDetailsPage(): JSX.Element {
             )}
 
             {!isMobile && (
-              <div className="mt-3 rounded-2xl border border-[#FFE0D8] bg-[#FFF7F4] p-4 text-sm leading-6 text-[#8A4B3F]">
-                Кнопка “Получить QR” доступна и на сайте, но для удобного
-                использования откройте QR в мобильном приложении или на телефоне.
+              <div className="mt-4 rounded-2xl border border-[#FFE0D8] bg-[#FFF7F4] p-4 text-sm leading-6 text-[#8A4B3F]">
+                QR можно получить на сайте, но удобнее открыть эту страницу на
+                телефоне и показать код сотруднику партнёра.
               </div>
             )}
 
             {offer.locations.length > 0 && (
               <label className="mt-5 block">
-                <span className="text-sm font-bold text-[#17384B]">
+                <span className="text-sm font-black text-[#17384B]">
                   Точка применения
                 </span>
+
                 <select
                   value={effectiveLocationId ?? ""}
                   onChange={(event) => setSelectedLocationId(event.target.value)}
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm outline-none focus:border-[#FF9F8A]"
+                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-bold text-[#17384B] outline-none transition focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
                 >
                   {offer.locations.map((location) => (
                     <option key={location.id} value={location.id}>
@@ -437,7 +565,7 @@ export default function OfferDetailsPage(): JSX.Element {
               type="button"
               onClick={createQr}
               disabled={isCreating || !isAllowedStudentEmail}
-              className="mt-5 w-full rounded-2xl bg-[#FF9F8A] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#f28977] disabled:opacity-60"
+              className="ub-gradient-button mt-5 w-full rounded-2xl px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isCreating ? "Создаём QR..." : "Получить QR"}
             </button>
@@ -449,14 +577,19 @@ export default function OfferDetailsPage(): JSX.Element {
             )}
 
             {createdRedemption && (
-              <div className="mt-5 rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5 text-center">
-                <p className="text-sm font-bold text-[#17384B]">
+              <div className="mt-5 rounded-[26px] border border-[#E5ECE9] bg-[#F9FAF8] p-5 text-center">
+                <p className="text-sm font-black text-[#17384B]">
                   QR-код создан
                 </p>
-                <LocalQrCode value={createdRedemption.qrToken} />
+
+                <div className="mt-4 rounded-[24px] bg-white p-4">
+                  <LocalQrCode value={createdRedemption.qrToken} />
+                </div>
+
                 <p className="mt-4 break-all rounded-2xl bg-white px-3 py-2 font-mono text-xs font-bold text-[#526470]">
                   {createdRedemption.qrToken}
                 </p>
+
                 <p className="mt-2 text-xs text-[#6B7280]">
                   Действует до:{" "}
                   {createdRedemption.qrExpiresAt
@@ -467,8 +600,17 @@ export default function OfferDetailsPage(): JSX.Element {
             )}
           </div>
 
-          <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-            <h2 className="text-xl font-bold text-[#17384B]">Где действует</h2>
+          <div className="ub-card rounded-[30px] p-6">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-xl font-black text-[#17384B]">
+                Где действует
+              </h2>
+
+              <span className="rounded-full bg-[#F7F6F1] px-3 py-1 text-xs font-black text-[#526470]">
+                {offer.locations.length}
+              </span>
+            </div>
+
             <div className="mt-4 space-y-3">
               {offer.locations.length === 0 ? (
                 <p className="text-sm text-[#6B7280]">Локации не указаны.</p>
@@ -478,7 +620,7 @@ export default function OfferDetailsPage(): JSX.Element {
                     key={location.id}
                     className="rounded-2xl bg-[#F7F6F1] p-4"
                   >
-                    <p className="font-bold text-[#17384B]">{location.name}</p>
+                    <p className="font-black text-[#17384B]">{location.name}</p>
                     <p className="mt-1 text-sm text-[#6B7280]">
                       {[location.city, location.address].filter(Boolean).join(", ")}
                     </p>
@@ -488,28 +630,44 @@ export default function OfferDetailsPage(): JSX.Element {
             </div>
           </div>
 
-          <div className="rounded-[28px] bg-white p-6 shadow-[0_16px_32px_rgba(15,23,42,0.05)]">
-            <h2 className="text-xl font-bold text-[#17384B]">Отзывы</h2>
-            <p className="mt-2 text-sm text-[#6B7280]">
-              Средняя оценка:{" "}
-              <span className="font-bold text-[#17384B]">
-                {offer.stats.averageRating
-                  ? offer.stats.averageRating.toFixed(1)
-                  : "нет оценок"}
-              </span>
-            </p>
+          <div className="ub-card rounded-[30px] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-[#17384B]">Отзывы</h2>
+                <p className="mt-1 text-sm text-[#6B7280]">
+                  {offer.stats.reviewCount} отзывов
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-2xl font-black text-[#17384B]">
+                  {offer.stats.averageRating
+                    ? offer.stats.averageRating.toFixed(1)
+                    : "—"}
+                </p>
+                <RatingStars rating={offer.stats.averageRating} />
+              </div>
+            </div>
+
             <div className="mt-4 space-y-3">
               {offer.reviews.length === 0 ? (
-                <p className="text-sm text-[#6B7280]">Отзывов пока нет.</p>
+                <p className="rounded-2xl bg-[#F7F6F1] p-4 text-sm text-[#6B7280]">
+                  Отзывов пока нет. После первых использований здесь появятся
+                  оценки студентов.
+                </p>
               ) : (
                 offer.reviews.map((review) => (
                   <div
                     key={review.id}
                     className="rounded-2xl border border-[#E5ECE9] p-4"
                   >
-                    <p className="text-sm font-bold text-[#17384B]">
-                      Оценка: {review.rating}/5
-                    </p>
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-sm font-black text-[#17384B]">
+                        Оценка: {review.rating}/5
+                      </p>
+                      <RatingStars rating={review.rating} />
+                    </div>
+
                     {review.text && (
                       <p className="mt-2 text-sm leading-6 text-[#6B7280]">
                         {review.text}
