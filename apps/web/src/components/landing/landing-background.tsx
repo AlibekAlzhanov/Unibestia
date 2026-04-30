@@ -1,4 +1,3 @@
-
 import { type JSX, type ReactNode } from "react";
 
 export function LandingBackground({
@@ -8,14 +7,17 @@ export function LandingBackground({
 }): JSX.Element {
   return (
     <div className="relative overflow-hidden bg-[#F7F6F1]">
-      {/* Base soft gradients */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(circle_at_14%_10%,rgba(166,239,238,0.32),transparent_34%),radial-gradient(circle_at_86%_12%,rgba(255,166,159,0.22),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(247,246,241,0.30)_100%)]" />
-      <div className="pointer-events-none absolute left-[-110px] top-[120px] -z-10 h-[260px] w-[260px] rounded-full bg-[#DDF7F3] blur-3xl" />
-      <div className="pointer-events-none absolute right-[-120px] top-[420px] -z-10 h-[300px] w-[300px] rounded-full bg-[#FFE9E2] blur-3xl" />
-      <div className="pointer-events-none absolute left-[6%] top-[1080px] -z-10 h-[260px] w-[260px] rounded-full bg-[#EAF5E6] blur-3xl" />
-      <div className="pointer-events-none absolute right-[8%] top-[1700px] -z-10 h-[280px] w-[280px] rounded-full bg-[#E4F2F9] blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[520px] bg-[radial-gradient(circle_at_14%_10%,rgba(166,239,238,0.34),transparent_34%),radial-gradient(circle_at_86%_12%,rgba(255,166,159,0.24),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.92)_0%,rgba(247,246,241,0.30)_100%)]" />
 
-      {/* Wave 1 */}
+      <div className="ub-animate-float pointer-events-none absolute left-[-120px] top-[120px] -z-10 h-[280px] w-[280px] rounded-full bg-[#DDF7F3] blur-3xl" />
+      <div className="ub-animate-float pointer-events-none absolute right-[-130px] top-[420px] -z-10 h-[320px] w-[320px] rounded-full bg-[#FFE9E2] blur-3xl" />
+      <div className="pointer-events-none absolute left-[6%] top-[1080px] -z-10 h-[280px] w-[280px] rounded-full bg-[#EAF5E6] blur-3xl" />
+      <div className="pointer-events-none absolute right-[8%] top-[1700px] -z-10 h-[300px] w-[300px] rounded-full bg-[#E4F2F9] blur-3xl" />
+
+      <div className="pointer-events-none absolute left-[8%] top-[220px] -z-10 hidden h-4 w-4 rounded-full bg-[#FF9F8A]/50 md:block" />
+      <div className="pointer-events-none absolute right-[18%] top-[310px] -z-10 hidden h-3 w-3 rounded-full bg-[#A6EFEE]/80 md:block" />
+      <div className="pointer-events-none absolute right-[9%] top-[760px] -z-10 hidden h-5 w-5 rounded-full bg-[#BEDD87]/70 lg:block" />
+
       <div className="pointer-events-none absolute inset-x-0 top-[760px] -z-10 h-[180px] overflow-hidden">
         <svg
           viewBox="0 0 1440 240"
@@ -34,7 +36,6 @@ export function LandingBackground({
         </svg>
       </div>
 
-      {/* Wave 2 */}
       <div className="pointer-events-none absolute inset-x-0 top-[1560px] -z-10 h-[190px] overflow-hidden">
         <svg
           viewBox="0 0 1440 240"
@@ -53,8 +54,7 @@ export function LandingBackground({
         </svg>
       </div>
 
-      {/* Bottom light fade */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[360px] bg-[radial-gradient(circle_at_18%_72%,rgba(166,239,238,0.14),transparent_22%),radial-gradient(circle_at_80%_76%,rgba(255,166,159,0.12),transparent_20%),linear-gradient(180deg,rgba(247,246,241,0)_0%,rgba(255,255,255,0.58)_100%)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[420px] bg-[radial-gradient(circle_at_18%_72%,rgba(166,239,238,0.16),transparent_22%),radial-gradient(circle_at_80%_76%,rgba(255,166,159,0.14),transparent_20%),linear-gradient(180deg,rgba(247,246,241,0)_0%,rgba(255,255,255,0.64)_100%)]" />
 
       {children}
     </div>
