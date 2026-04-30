@@ -35,24 +35,19 @@ export class WalletsRepository {
   }
 
   async createWalletForUser(userId: string): Promise<Wallet> {
-    const wallet = this.walletsRepo.create({
-      userId,
-      availableBalance: 0,
-      lifetimeEarned: 0,
-      lifetimeSpent: 0,
-    });
-
-    return this.walletsRepo.save(wallet);
+    return this.findOrCreateWalletByUserId(userId);
   }
 
   async findOrCreateWalletByUserId(userId: string): Promise<Wallet> {
-    const existing = await this.findWalletByUserId(userId);
+    await this.insertWalletIfMissing(this.walletsRepo, userId);
 
-    if (existing) {
-      return existing;
+    const wallet = await this.findWalletByUserId(userId);
+
+    if (!wallet) {
+      throw new Error("Failed to create or load wallet");
     }
 
-    return this.createWalletForUser(userId);
+    return wallet;
   }
 
   async findTransactionBySource(input: {
@@ -109,20 +104,15 @@ export class WalletsRepository {
       const walletRepo = manager.getRepository(Wallet);
       const transactionRepo = manager.getRepository(WalletTransaction);
 
-      let wallet = await walletRepo.findOne({
+      await this.insertWalletIfMissing(walletRepo, input.userId);
+
+      const wallet = await walletRepo.findOne({
         where: { userId: input.userId },
         lock: { mode: "pessimistic_write" },
       });
 
       if (!wallet) {
-        wallet = walletRepo.create({
-          userId: input.userId,
-          availableBalance: 0,
-          lifetimeEarned: 0,
-          lifetimeSpent: 0,
-        });
-
-        wallet = await walletRepo.save(wallet);
+        throw new Error("Failed to create or lock wallet");
       }
 
       const duplicate = await transactionRepo.findOne({
@@ -182,5 +172,23 @@ export class WalletsRepository {
       take: limit,
       skip: offset,
     });
+  }
+
+  private async insertWalletIfMissing(
+    walletRepo: Repository<Wallet>,
+    userId: string
+  ): Promise<void> {
+    await walletRepo
+      .createQueryBuilder()
+      .insert()
+      .into(Wallet)
+      .values({
+        userId,
+        availableBalance: 0,
+        lifetimeEarned: 0,
+        lifetimeSpent: 0,
+      })
+      .orIgnore()
+      .execute();
   }
 }
