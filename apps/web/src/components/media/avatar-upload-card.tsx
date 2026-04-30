@@ -1,7 +1,6 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
+import Image from "next/image";
 import { useAuth } from "@clerk/nextjs";
 import { type JSX, useMemo, useState } from "react";
 import { getBackendApiUrl } from "@/utils/backend-api-url";
@@ -76,11 +75,7 @@ export function AvatarUploadCard({
       return;
     }
 
-    if (![
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ].includes(avatarFile.type)) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(avatarFile.type)) {
       setError("Аватарка должна быть JPG, PNG или WEBP.");
       return;
     }
@@ -144,9 +139,12 @@ export function AvatarUploadCard({
 
       <div className="mt-5 flex items-center gap-4">
         {avatarUrl ? (
-          <img
+          <Image
             src={avatarUrl}
             alt="Аватарка пользователя"
+            width={96}
+            height={96}
+            sizes="96px"
             className="h-24 w-24 rounded-full border border-[#E5ECE9] object-cover"
           />
         ) : (

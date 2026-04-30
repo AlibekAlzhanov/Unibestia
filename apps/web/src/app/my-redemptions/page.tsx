@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -114,11 +115,15 @@ export default function MyRedemptionsPage(): JSX.Element {
               </div>
 
               <div className="mt-5 flex flex-col gap-4 rounded-[24px] bg-[#F9FAF8] p-4 md:flex-row md:items-center">
-                <img
+                <Image
                   src={qrImageUrl(item.qrToken)}
                   alt="QR code"
+                  width={160}
+                  height={160}
+                  sizes="160px"
                   className="h-[160px] w-[160px] rounded-2xl bg-white p-3"
                 />
+
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#9CA3AF]">
                     QR token
