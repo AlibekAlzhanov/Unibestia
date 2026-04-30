@@ -2,85 +2,76 @@
 
 import Link from "next/link";
 import { type JSX, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/utils/trpc";
 
 type RequestStatus =
   | "pending"
-  | "review"
+  | "in_review"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | string;
+
+type RequestDecision = "approve" | "reject" | "cancel" | string | null;
+
+type PartnerRequestItem = {
+  id: string;
+  type: string;
+  status: RequestStatus;
+  decision: RequestDecision;
+  decisionComment: string | null;
+  entityType: string;
+  entityId: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  resolvedAt: Date | string | null;
+  assignedAdmin: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  } | null;
+  resolvedBy: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  } | null;
+  offer: {
+    id: string;
+    title: string;
+    slug: string;
+    status: string;
+    createdAt: Date | string;
+    updatedAt: Date | string;
+  } | null;
+};
+
+type PartnerRequestsData = {
+  total: number;
+  limit: number;
+  offset: number;
+  items: PartnerRequestItem[];
+};
+
+type StatusFilter =
+  | "all"
+  | "pending"
+  | "in_review"
   | "approved"
   | "rejected"
   | "cancelled";
 
-type RequestType =
-  | "offer_publication"
-  | "offer_update"
-  | "location_add"
-  | "staff_access"
-  | "content_moderation";
-
-type PartnerRequest = {
-  id: string;
-  title: string;
-  type: RequestType;
-  status: RequestStatus;
-  description: string;
-  target: string;
-  priority: "low" | "medium" | "high";
-  createdAt: string;
-  updatedAt: string;
-};
-
-type StatusFilter = "all" | RequestStatus;
-
-const requests: PartnerRequest[] = [
-  {
-    id: "req-001",
-    title: "Публикация скидки 10% на обеды",
-    type: "offer_publication",
-    status: "pending",
-    description:
-      "Партнёр отправил новую скидку на модерацию. После одобрения скидка станет доступна студентам в каталоге.",
-    target: "Lunch 10%",
-    priority: "high",
-    createdAt: "2026-04-27T10:15:00",
-    updatedAt: "2026-04-27T10:15:00",
-  },
-  {
-    id: "req-002",
-    title: "Изменение условий Coffee 15%",
-    type: "offer_update",
-    status: "review",
-    description:
-      "Запрос на изменение текста условий, минимальной суммы заказа и описания скидки.",
-    target: "Coffee 15%",
-    priority: "medium",
-    createdAt: "2026-04-26T16:30:00",
-    updatedAt: "2026-04-27T09:10:00",
-  },
-  {
-    id: "req-003",
-    title: "Добавление новой точки продаж",
-    type: "location_add",
-    status: "approved",
-    description:
-      "Новая точка продаж проверена и может использоваться при создании офферов и QR-redemptions.",
-    target: "Satbayev Campus Point",
-    priority: "low",
-    createdAt: "2026-04-25T13:20:00",
-    updatedAt: "2026-04-25T18:45:00",
-  },
-];
-
 const statusFilters: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Все" },
   { value: "pending", label: "Ожидают" },
-  { value: "review", label: "На проверке" },
+  { value: "in_review", label: "На проверке" },
   { value: "approved", label: "Одобрены" },
   { value: "rejected", label: "Отклонены" },
   { value: "cancelled", label: "Отменены" },
 ];
 
-function typeLabel(type: RequestType): string {
-  const labels: Record<RequestType, string> = {
+function requestTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
     offer_publication: "Публикация скидки",
     offer_update: "Изменение скидки",
     location_add: "Добавление точки",
@@ -88,27 +79,38 @@ function typeLabel(type: RequestType): string {
     content_moderation: "Модерация контента",
   };
 
-  return labels[type];
+  return labels[type] ?? type;
 }
 
-function statusLabel(status: RequestStatus): string {
-  const labels: Record<RequestStatus, string> = {
+function entityTypeLabel(entityType: string): string {
+  const labels: Record<string, string> = {
+    offer: "Оффер",
+    partner: "Партнёр",
+    review: "Отзыв",
+    student_verification: "Верификация студента",
+  };
+
+  return labels[entityType] ?? entityType;
+}
+
+function statusLabel(status: string): string {
+  const labels: Record<string, string> = {
     pending: "Ожидает",
-    review: "На проверке",
+    in_review: "На проверке",
     approved: "Одобрено",
     rejected: "Отклонено",
     cancelled: "Отменено",
   };
 
-  return labels[status];
+  return labels[status] ?? status;
 }
 
-function statusClass(status: RequestStatus): string {
+function statusClass(status: string): string {
   if (status === "approved") {
     return "border-green-200 bg-green-50 text-green-700";
   }
 
-  if (status === "pending" || status === "review") {
+  if (status === "pending" || status === "in_review") {
     return "border-yellow-200 bg-yellow-50 text-yellow-700";
   }
 
@@ -119,34 +121,116 @@ function statusClass(status: RequestStatus): string {
   return "border-[#E5ECE9] bg-[#F7F6F1] text-[#526470]";
 }
 
-function priorityLabel(priority: PartnerRequest["priority"]): string {
-  const labels: Record<PartnerRequest["priority"], string> = {
-    low: "Низкий",
-    medium: "Средний",
-    high: "Высокий",
+function decisionLabel(decision: RequestDecision): string {
+  if (!decision) {
+    return "Решения пока нет";
+  }
+
+  const labels: Record<string, string> = {
+    approve: "Одобрено",
+    reject: "Отклонено",
+    cancel: "Отменено",
   };
 
-  return labels[priority];
+  return labels[decision] ?? decision;
 }
 
-function priorityClass(priority: PartnerRequest["priority"]): string {
-  if (priority === "high") {
+function decisionClass(decision: RequestDecision): string {
+  if (decision === "approve") {
+    return "border-green-200 bg-green-50 text-green-700";
+  }
+
+  if (decision === "reject" || decision === "cancel") {
     return "border-red-200 bg-red-50 text-red-700";
   }
 
-  if (priority === "medium") {
-    return "border-yellow-200 bg-yellow-50 text-yellow-700";
-  }
-
-  return "border-green-200 bg-green-50 text-green-700";
+  return "border-[#E5ECE9] bg-[#F7F6F1] text-[#526470]";
 }
 
-function formatDateTime(value: string): string {
+function offerStatusLabel(status?: string | null): string {
+  if (!status) {
+    return "—";
+  }
+
+  const labels: Record<string, string> = {
+    draft: "Черновик",
+    pending_review: "На модерации",
+    approved: "Одобрен",
+    published: "Опубликован",
+    rejected: "Отклонён",
+    archived: "Архив",
+  };
+
+  return labels[status] ?? status;
+}
+
+function formatDateTime(value?: Date | string | null): string {
+  if (!value) {
+    return "—";
+  }
+
   return new Date(value).toLocaleString("ru-RU");
 }
 
-function getStatusCount(items: PartnerRequest[], status: RequestStatus): number {
+function getStatusCount(items: PartnerRequestItem[], status: string): number {
   return items.filter((item) => item.status === status).length;
+}
+
+function getRequestTitle(request: PartnerRequestItem): string {
+  if (request.offer?.title) {
+    return request.offer.title;
+  }
+
+  return `${requestTypeLabel(request.type)} #${request.id.slice(0, 8)}`;
+}
+
+function getRequestDescription(request: PartnerRequestItem): string {
+  if (request.status === "pending") {
+    return "Заявка создана и ожидает решения администратора.";
+  }
+
+  if (request.status === "in_review") {
+    return "Администратор взял заявку в работу и проверяет данные.";
+  }
+
+  if (request.status === "approved") {
+    return "Заявка успешно одобрена. Оффер может быть опубликован или уже опубликован.";
+  }
+
+  if (request.status === "rejected") {
+    return "Заявка отклонена. Ознакомьтесь с комментарием администратора и исправьте оффер.";
+  }
+
+  if (request.status === "cancelled") {
+    return "Заявка отменена и больше не участвует в модерации.";
+  }
+
+  return "Заявка партнёра находится в workflow модерации.";
+}
+
+function LoadingRequests(): JSX.Element {
+  return (
+    <section className="grid gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <article key={index} className="ub-card rounded-[30px] p-6">
+          <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
+            <div>
+              <div className="ub-skeleton h-7 w-40 rounded-full" />
+              <div className="ub-skeleton mt-5 h-7 w-2/3 rounded-full" />
+              <div className="ub-skeleton mt-4 h-4 w-full rounded-full" />
+              <div className="ub-skeleton mt-3 h-4 w-4/5 rounded-full" />
+            </div>
+
+            <div className="grid gap-3">
+              <div className="ub-skeleton h-12 rounded-2xl" />
+              <div className="ub-skeleton h-12 rounded-2xl" />
+              <div className="ub-skeleton h-12 rounded-2xl" />
+            </div>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
 }
 
 function EmptyRequests({
@@ -169,18 +253,27 @@ function EmptyRequests({
       <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-[#6B7280]">
         {hasFilters
           ? "По выбранному статусу или поиску заявок нет. Сбросьте фильтры или измените запрос."
-          : "Когда партнёр отправит скидку на модерацию, изменит условия или добавит точку, заявка появится здесь."}
+          : "Когда партнёр отправит скидку на модерацию, заявка появится здесь."}
       </p>
 
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={onReset}
-          className="ub-gradient-button mt-6 rounded-2xl px-5 py-3 text-sm font-black text-white"
+      <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="rounded-2xl border border-[#D8E3DE] bg-white px-5 py-3 text-sm font-black text-[#17384B] transition hover:bg-[#F7F6F1]"
+          >
+            Сбросить фильтры
+          </button>
+        )}
+
+        <Link
+          href="/partner/offers"
+          className="ub-gradient-button rounded-2xl px-5 py-3 text-sm font-black text-white"
         >
-          Сбросить фильтры
-        </button>
-      )}
+          Открыть скидки
+        </Link>
+      </div>
     </section>
   );
 }
@@ -214,10 +307,17 @@ function MetricCard({
   );
 }
 
-function RequestCard({ request }: { request: PartnerRequest }): JSX.Element {
+function RequestCard({
+  request,
+}: {
+  request: PartnerRequestItem;
+}): JSX.Element {
+  const title = getRequestTitle(request);
+  const description = getRequestDescription(request);
+
   return (
     <article className="ub-card rounded-[30px] p-6">
-      <div className="grid gap-5 xl:grid-cols-[1fr_320px] xl:items-start">
+      <div className="grid gap-5 xl:grid-cols-[1fr_340px] xl:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -232,32 +332,54 @@ function RequestCard({ request }: { request: PartnerRequest }): JSX.Element {
             <span
               className={[
                 "rounded-2xl border px-3 py-1 text-xs font-black",
-                priorityClass(request.priority),
+                decisionClass(request.decision),
               ].join(" ")}
             >
-              {priorityLabel(request.priority)}
+              {decisionLabel(request.decision)}
             </span>
 
             <span className="rounded-2xl bg-[#F7F6F1] px-3 py-1 text-xs font-black text-[#526470]">
-              {typeLabel(request.type)}
+              {requestTypeLabel(request.type)}
+            </span>
+
+            <span className="rounded-2xl bg-[#F7F6F1] px-3 py-1 text-xs font-black text-[#526470]">
+              {entityTypeLabel(request.entityType)}
             </span>
           </div>
 
           <h2 className="mt-5 text-2xl font-black leading-tight text-[#17384B]">
-            {request.title}
+            {title}
           </h2>
 
           <p className="mt-3 max-w-3xl text-sm leading-7 text-[#6B7280]">
-            {request.description}
+            {description}
           </p>
+
+          {request.decisionComment && (
+            <div className="mt-5 rounded-[24px] border border-[#FFE0D8] bg-[#FFF7F4] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#FF7F6E]">
+                Комментарий администратора
+              </p>
+
+              <p className="mt-2 text-sm leading-7 text-[#8A4B3F]">
+                {request.decisionComment}
+              </p>
+            </div>
+          )}
 
           <div className="mt-5 grid gap-3 text-sm md:grid-cols-2">
             <div className="rounded-2xl bg-[#F9FAF8] p-4">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
-                Target
+                Оффер
               </p>
 
-              <p className="mt-1 font-bold text-[#17384B]">{request.target}</p>
+              <p className="mt-1 font-bold text-[#17384B]">
+                {request.offer?.title ?? "—"}
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                Статус оффера: {offerStatusLabel(request.offer?.status)}
+              </p>
             </div>
 
             <div className="rounded-2xl bg-[#F9FAF8] p-4">
@@ -267,6 +389,10 @@ function RequestCard({ request }: { request: PartnerRequest }): JSX.Element {
 
               <p className="mt-1 break-all font-bold text-[#17384B]">
                 {request.id}
+              </p>
+
+              <p className="mt-1 break-all text-xs leading-5 text-[#6B7280]">
+                Entity: {request.entityId}
               </p>
             </div>
           </div>
@@ -290,13 +416,52 @@ function RequestCard({ request }: { request: PartnerRequest }): JSX.Element {
                   {formatDateTime(request.updatedAt)}
                 </span>
               </div>
+
+              <div className="flex items-center justify-between gap-4 rounded-2xl bg-white px-4 py-3">
+                <span className="font-bold text-[#526470]">Решено</span>
+                <span className="text-right font-black text-[#17384B]">
+                  {formatDateTime(request.resolvedAt)}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-[#FFE0D8] bg-[#FFF7F4] p-4 text-sm leading-6 text-[#8A4B3F]">
-            Сейчас страница работает как demo-view. Позже можно подключить
-            backend-модуль partner_requests и хранить заявки в PostgreSQL.
+          <div className="rounded-[24px] border border-[#E5ECE9] bg-white p-4">
+            <p className="text-sm font-black text-[#17384B]">Moderation</p>
+
+            <div className="mt-4 grid gap-3 text-sm">
+              <div className="rounded-2xl bg-[#F9FAF8] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
+                  Assigned admin
+                </p>
+
+                <p className="mt-1 break-all font-bold text-[#17384B]">
+                  {request.assignedAdmin?.displayName ??
+                    request.assignedAdmin?.email ??
+                    "—"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-[#F9FAF8] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
+                  Resolved by
+                </p>
+
+                <p className="mt-1 break-all font-bold text-[#17384B]">
+                  {request.resolvedBy?.displayName ??
+                    request.resolvedBy?.email ??
+                    "—"}
+                </p>
+              </div>
+            </div>
           </div>
+
+          <Link
+            href="/partner/offers"
+            className="rounded-2xl border border-[#D8E3DE] bg-white px-5 py-3 text-center text-sm font-black text-[#17384B] transition hover:border-[#FFB5A4] hover:bg-[#F7F6F1]"
+          >
+            Открыть скидки →
+          </Link>
         </aside>
       </div>
     </article>
@@ -304,8 +469,26 @@ function RequestCard({ request }: { request: PartnerRequest }): JSX.Element {
 }
 
 export default function PartnerRequestsPage(): JSX.Element {
+  const trpc = useTRPC();
+
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
+
+  const requestsQuery = useQuery({
+    ...trpc.business.partner.listRequests.queryOptions({
+      limit: 50,
+      offset: 0,
+    }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
+  });
+
+  const requestsData = requestsQuery.data as PartnerRequestsData | undefined;
+  const requests = useMemo(
+    () => requestsData?.items ?? [],
+    [requestsData?.items]
+  );
 
   const filteredRequests = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -321,23 +504,31 @@ export default function PartnerRequestsPage(): JSX.Element {
 
       const searchable = [
         request.id,
-        request.title,
         request.type,
         request.status,
-        request.description,
-        request.target,
-        request.priority,
+        request.decision,
+        request.decisionComment,
+        request.entityType,
+        request.entityId,
+        request.offer?.title,
+        request.offer?.slug,
+        request.offer?.status,
+        request.assignedAdmin?.email,
+        request.assignedAdmin?.displayName,
+        request.resolvedBy?.email,
+        request.resolvedBy?.displayName,
       ]
+        .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
       return searchable.includes(normalizedSearch);
     });
-  }, [search, statusFilter]);
+  }, [requests, search, statusFilter]);
 
   const totalRequests = requests.length;
   const pendingCount = getStatusCount(requests, "pending");
-  const reviewCount = getStatusCount(requests, "review");
+  const reviewCount = getStatusCount(requests, "in_review");
   const approvedCount = getStatusCount(requests, "approved");
   const rejectedCount = getStatusCount(requests, "rejected");
 
@@ -365,9 +556,9 @@ export default function PartnerRequestsPage(): JSX.Element {
             </h1>
 
             <p className="mt-4 max-w-2xl text-base leading-8 text-[#DDE8EA]">
-              Отслеживайте заявки на публикацию скидок, изменение условий,
-              добавление точек и модерацию контента. Раздел показывает, что
-              действия партнёра проходят через контролируемый workflow.
+              Здесь отображаются реальные moderation tasks: отправленные на
+              проверку офферы, решения администратора, комментарии и текущий
+              статус заявки.
             </p>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -376,6 +567,13 @@ export default function PartnerRequestsPage(): JSX.Element {
                 className="ub-gradient-button rounded-2xl px-5 py-3 text-center text-sm font-black text-white"
               >
                 Скидки партнёра
+              </Link>
+
+              <Link
+                href="/partner/offers/new"
+                className="rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-center text-sm font-black text-white transition hover:bg-white/15"
+              >
+                Создать скидку
               </Link>
 
               <Link
@@ -416,7 +614,7 @@ export default function PartnerRequestsPage(): JSX.Element {
         <MetricCard
           label="Всего заявок"
           value={totalRequests}
-          hint="demo workflow"
+          hint="реальные moderation tasks"
           index={0}
         />
 
@@ -462,7 +660,7 @@ export default function PartnerRequestsPage(): JSX.Element {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Название, тип, target..."
+              placeholder="Оффер, статус, комментарий..."
               className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
             />
           </label>
@@ -501,7 +699,15 @@ export default function PartnerRequestsPage(): JSX.Element {
         </div>
       </section>
 
-      {filteredRequests.length === 0 ? (
+      {requestsQuery.error && (
+        <div className="rounded-[28px] border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">
+          Не удалось загрузить заявки: {requestsQuery.error.message}
+        </div>
+      )}
+
+      {requestsQuery.isLoading && !requestsQuery.data ? (
+        <LoadingRequests />
+      ) : filteredRequests.length === 0 ? (
         <EmptyRequests hasFilters={hasFilters} onReset={resetFilters} />
       ) : (
         <section className="grid gap-4">
