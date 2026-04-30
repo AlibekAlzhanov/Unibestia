@@ -16,24 +16,87 @@ type OfferStatus =
   | "rejected"
   | "archived";
 
+type OfferLocationItem = {
+  id: string;
+  name: string;
+  city?: string | null;
+  address?: string | null;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  isActive?: boolean | null;
+  offerLocationId?: string | null;
+};
+
 type OfferDetail = {
   id: string;
+  partnerId: string;
+  categoryId: string;
   slug: string;
   title: string;
   shortDescription?: string | null;
+  description: string;
+  terms?: string | null;
   status: OfferStatus;
   benefitType?: string | null;
   discountType?: string | null;
   discountValue?: string | null;
   cashbackPercent?: string | null;
   bonusRewardPoints?: number | null;
+  minPurchaseAmount?: string | null;
+  usageLimitPerUser?: number | null;
+  totalUsageLimit?: number | null;
+  startAt: Date | string;
+  endAt?: Date | string | null;
   isFeatured?: boolean | null;
-  createdAt: Date | string;
   publishedAt?: Date | string | null;
-  redemptions: {
-    total: number;
-    used: number;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  category: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+  locations: OfferLocationItem[];
+};
+
+type ModerationRequestItem = {
+  id: string;
+  status: string;
+  decision: string | null;
+  decisionComment: string | null;
+  entityType: string;
+  entityId: string;
+  assignedAdmin: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  } | null;
+  resolvedBy: {
+    id: string;
+    email: string;
+    displayName: string | null;
+  } | null;
+  resolvedAt: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+type PartnerOfferDetailData = {
+  partner: {
+    id: string;
+    brandName: string;
+    status: string;
   };
+  offer: OfferDetail;
+  redemptionsSummary: {
+    total: number;
+    created: number;
+    confirmed: number;
+    used: number;
+    expired: number;
+    cancelled: number;
+  };
+  moderationRequests: ModerationRequestItem[];
 };
 
 type RedemptionItem = {
@@ -68,43 +131,9 @@ type RedemptionItem = {
   } | null;
 };
 
-type PartnerRequestItem = {
-  id: string;
-  type: string;
-  status: string;
-  decision: string | null;
-  decisionComment: string | null;
-  entityType: string;
-  entityId: string;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  resolvedAt: Date | string | null;
-  resolvedBy: {
-    id: string;
-    email: string;
-    displayName: string | null;
-  } | null;
-  offer: {
-    id: string;
-    title: string;
-    slug: string;
-    status: string;
-  } | null;
-};
-
-type PartnerOffersData = {
-  total: number;
-  items: OfferDetail[];
-};
-
 type PartnerRedemptionsData = {
   total: number;
   items: RedemptionItem[];
-};
-
-type PartnerRequestsData = {
-  total: number;
-  items: PartnerRequestItem[];
 };
 
 function formatBenefit(offer: {
@@ -285,6 +314,10 @@ function getLocationText(item: RedemptionItem): string {
   return [item.location.city, item.location.address].filter(Boolean).join(", ");
 }
 
+function getOfferLocationText(location: OfferLocationItem): string {
+  return [location.city, location.address].filter(Boolean).join(", ") || "—";
+}
+
 function MetricTile({
   label,
   value,
@@ -313,7 +346,7 @@ function InfoRow({
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl bg-[#F9FAF8] px-4 py-3">
       <span className="text-sm font-bold text-[#526470]">{label}</span>
-      <span className="text-right text-sm font-black text-[#17384B]">
+      <span className="break-all text-right text-sm font-black text-[#17384B]">
         {value}
       </span>
     </div>
@@ -432,7 +465,7 @@ function RedemptionCard({ item }: { item: RedemptionItem }): JSX.Element {
   );
 }
 
-function RequestCard({ item }: { item: PartnerRequestItem }): JSX.Element {
+function RequestCard({ item }: { item: ModerationRequestItem }): JSX.Element {
   return (
     <article className="rounded-[24px] border border-[#E5ECE9] bg-white p-4 transition hover:border-[#FFB5A4] hover:shadow-[0_14px_30px_rgba(15,23,42,0.06)]">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -453,7 +486,7 @@ function RequestCard({ item }: { item: PartnerRequestItem }): JSX.Element {
           </div>
 
           <h3 className="mt-3 text-base font-black text-[#17384B]">
-            {item.offer?.title ?? "Заявка на модерацию"}
+            Заявка на модерацию скидки
           </h3>
 
           <p className="mt-2 text-sm leading-6 text-[#6B7280]">
@@ -482,6 +515,32 @@ function RequestCard({ item }: { item: PartnerRequestItem }): JSX.Element {
   );
 }
 
+function LocationCard({ location }: { location: OfferLocationItem }): JSX.Element {
+  return (
+    <article className="rounded-[22px] border border-[#E5ECE9] bg-[#F9FAF8] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-black text-[#17384B]">{location.name}</p>
+          <p className="mt-1 text-sm leading-6 text-[#6B7280]">
+            {getOfferLocationText(location)}
+          </p>
+        </div>
+
+        <span
+          className={[
+            "rounded-2xl px-3 py-1 text-xs font-black",
+            location.isActive === false
+              ? "bg-red-50 text-red-700"
+              : "bg-green-50 text-green-700",
+          ].join(" ")}
+        >
+          {location.isActive === false ? "inactive" : "active"}
+        </span>
+      </div>
+    </article>
+  );
+}
+
 export default function PartnerOfferDetailPage(): JSX.Element {
   const params = useParams<{ offerId: string }>();
   const offerId = params.offerId;
@@ -494,10 +553,9 @@ export default function PartnerOfferDetailPage(): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const offersQuery = useQuery({
-    ...trpc.business.partner.listOffers.queryOptions({
-      limit: 100,
-      offset: 0,
+  const offerDetailQuery = useQuery({
+    ...trpc.business.partner.getOfferById.queryOptions({
+      offerId,
     }),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -514,37 +572,20 @@ export default function PartnerOfferDetailPage(): JSX.Element {
     placeholderData: (previousData) => previousData,
   });
 
-  const requestsQuery = useQuery({
-    ...trpc.business.partner.listRequests.queryOptions({
-      limit: 100,
-      offset: 0,
-    }),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    placeholderData: (previousData) => previousData,
-  });
-
-  const offersData = offersQuery.data as PartnerOffersData | undefined;
+  const detail = offerDetailQuery.data as PartnerOfferDetailData | undefined;
   const redemptionsData = redemptionsQuery.data as
     | PartnerRedemptionsData
     | undefined;
-  const requestsData = requestsQuery.data as PartnerRequestsData | undefined;
 
-  const offer = useMemo(() => {
-    return (offersData?.items ?? []).find((item) => item.id === offerId) ?? null;
-  }, [offerId, offersData?.items]);
+  const offer = detail?.offer ?? null;
+  const redemptionsSummary = detail?.redemptionsSummary;
+  const moderationRequests = detail?.moderationRequests ?? [];
 
   const redemptions = useMemo(() => {
     return (redemptionsData?.items ?? []).filter(
       (item) => item.offer?.id === offerId
     );
   }, [offerId, redemptionsData?.items]);
-
-  const requests = useMemo(() => {
-    return (requestsData?.items ?? []).filter(
-      (item) => item.entityId === offerId || item.offer?.id === offerId
-    );
-  }, [offerId, requestsData?.items]);
 
   const totalOrderAmount = redemptions.reduce((sum, item) => {
     return sum + Number(item.orderAmount ?? 0);
@@ -573,7 +614,7 @@ export default function PartnerOfferDetailPage(): JSX.Element {
       });
 
       setMessage("Скидка отправлена на модерацию.");
-      await Promise.all([offersQuery.refetch(), requestsQuery.refetch()]);
+      await offerDetailQuery.refetch();
     } catch (caughtError) {
       setErrorMessage(
         caughtError instanceof Error
@@ -585,10 +626,7 @@ export default function PartnerOfferDetailPage(): JSX.Element {
     }
   }
 
-  const isLoading =
-    offersQuery.isLoading && !offersQuery.data;
-
-  if (isLoading) {
+  if (offerDetailQuery.isLoading && !offerDetailQuery.data) {
     return (
       <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
         <LoadingDetail />
@@ -596,7 +634,7 @@ export default function PartnerOfferDetailPage(): JSX.Element {
     );
   }
 
-  if (offersQuery.error) {
+  if (offerDetailQuery.error) {
     return (
       <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[900px] flex-col justify-center px-4 py-8">
         <section className="rounded-[34px] border border-red-200 bg-red-50 p-8 text-red-700">
@@ -606,7 +644,9 @@ export default function PartnerOfferDetailPage(): JSX.Element {
 
           <h1 className="mt-2 text-3xl font-black">Не удалось загрузить скидку</h1>
 
-          <p className="mt-3 text-sm leading-7">{offersQuery.error.message}</p>
+          <p className="mt-3 text-sm leading-7">
+            {offerDetailQuery.error.message}
+          </p>
 
           <Link
             href="/partner/offers"
@@ -619,7 +659,7 @@ export default function PartnerOfferDetailPage(): JSX.Element {
     );
   }
 
-  if (!offer) {
+  if (!offer || !redemptionsSummary) {
     return (
       <div className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[900px] flex-col justify-center px-4 py-8">
         <section className="ub-card rounded-[34px] p-8 text-center">
@@ -745,13 +785,13 @@ export default function PartnerOfferDetailPage(): JSX.Element {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricTile
           label="Всего QR"
-          value={offer.redemptions.total}
+          value={redemptionsSummary.total}
           hint="Все созданные QR по скидке"
         />
 
         <MetricTile
           label="Использовано"
-          value={offer.redemptions.used}
+          value={redemptionsSummary.used}
           hint="Подтверждено staff-пользователями"
         />
 
@@ -782,14 +822,30 @@ export default function PartnerOfferDetailPage(): JSX.Element {
             <div className="mt-6 grid gap-3 md:grid-cols-2">
               <InfoRow label="ID" value={offer.id} />
               <InfoRow label="Slug" value={`/${offer.slug}`} />
+              <InfoRow label="Категория" value={offer.category?.name ?? "—"} />
               <InfoRow label="Статус" value={statusLabel(offer.status)} />
               <InfoRow label="Выгода" value={formatBenefit(offer)} />
               <InfoRow label="Тип выгоды" value={offer.benefitType ?? "—"} />
               <InfoRow
+                label="Мин. сумма"
+                value={formatAmount(offer.minPurchaseAmount)}
+              />
+              <InfoRow
+                label="Лимит на пользователя"
+                value={offer.usageLimitPerUser ?? "—"}
+              />
+              <InfoRow
+                label="Общий лимит"
+                value={offer.totalUsageLimit ?? "—"}
+              />
+              <InfoRow
                 label="Featured"
                 value={offer.isFeatured ? "Да" : "Нет"}
               />
+              <InfoRow label="Начало" value={formatDateTime(offer.startAt)} />
+              <InfoRow label="Конец" value={formatDateTime(offer.endAt)} />
               <InfoRow label="Создано" value={formatDateTime(offer.createdAt)} />
+              <InfoRow label="Обновлено" value={formatDateTime(offer.updatedAt)} />
               <InfoRow
                 label="Опубликовано"
                 value={formatDateTime(offer.publishedAt)}
@@ -801,10 +857,43 @@ export default function PartnerOfferDetailPage(): JSX.Element {
                 Описание
               </p>
 
-              <p className="mt-2 text-sm leading-7 text-[#526470]">
-                {offer.shortDescription ??
-                  "Короткое описание не указано. Можно использовать эту страницу для демонстрации статуса и аналитики скидки."}
+              <p className="mt-2 whitespace-pre-line text-sm leading-7 text-[#526470]">
+                {offer.description || "Описание не указано."}
               </p>
+            </div>
+
+            {offer.terms && (
+              <div className="mt-4 rounded-[26px] border border-[#FFE0D8] bg-[#FFF7F4] p-5">
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FF7F6E]">
+                  Условия
+                </p>
+
+                <p className="mt-2 whitespace-pre-line text-sm leading-7 text-[#8A4B3F]">
+                  {offer.terms}
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className="ub-animate-fade-up ub-card rounded-[34px] p-6 md:p-7">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
+              Locations
+            </p>
+
+            <h2 className="mt-1 text-2xl font-black text-[#17384B]">
+              Точки действия
+            </h2>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-2">
+              {offer.locations.length === 0 ? (
+                <div className="rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-5 text-sm leading-7 text-[#6B7280] md:col-span-2">
+                  Для этой скидки не выбраны отдельные точки.
+                </div>
+              ) : (
+                offer.locations.map((location) => (
+                  <LocationCard key={location.id} location={location} />
+                ))
+              )}
             </div>
           </section>
 
@@ -857,7 +946,7 @@ export default function PartnerOfferDetailPage(): JSX.Element {
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-[#6B7280]">
-                  Показано: {requests.length} заявок по этой скидке.
+                  Показано: {moderationRequests.length} заявок по этой скидке.
                 </p>
               </div>
 
@@ -870,12 +959,12 @@ export default function PartnerOfferDetailPage(): JSX.Element {
             </div>
 
             <div className="mt-6 grid gap-3">
-              {requestsQuery.isLoading && !requestsQuery.data ? (
-                <div className="ub-skeleton h-28 rounded-[24px]" />
-              ) : requests.length === 0 ? (
+              {moderationRequests.length === 0 ? (
                 <EmptyRequests />
               ) : (
-                requests.map((item) => <RequestCard key={item.id} item={item} />)
+                moderationRequests.map((item) => (
+                  <RequestCard key={item.id} item={item} />
+                ))
               )}
             </div>
           </section>
@@ -904,7 +993,7 @@ export default function PartnerOfferDetailPage(): JSX.Element {
               <OfferImageUploadButton
                 offerId={offer.id}
                 getToken={getToken}
-                onUploaded={() => offersQuery.refetch()}
+                onUploaded={() => offerDetailQuery.refetch()}
               />
             </div>
           </section>

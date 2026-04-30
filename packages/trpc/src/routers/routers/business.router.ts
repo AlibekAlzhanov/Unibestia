@@ -1594,6 +1594,153 @@ export class BusinessRouter {
           };
         }),
 
+      getOfferById: protectedProcedure
+        .input(z.object({ offerId: z.string().uuid() }))
+        .query(async ({ ctx, input }) => {
+          const { partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerReadOnlyOrManageAccess(membership);
+
+          const offer = await this.offersRepo.findOne({
+            where: { id: input.offerId, partnerId: partner.id },
+            relations: {
+              category: true,
+              offerLocations: {
+                location: true,
+              },
+            },
+          });
+
+          if (!offer) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Offer not found",
+            });
+          }
+
+          const [
+            totalRedemptions,
+            createdRedemptions,
+            confirmedRedemptions,
+            usedRedemptions,
+            expiredRedemptions,
+            cancelledRedemptions,
+            moderationTasks,
+          ] = await Promise.all([
+            this.redemptionsRepo.count({ where: { offerId: offer.id } }),
+            this.redemptionsRepo.count({
+              where: { offerId: offer.id, status: RedemptionStatus.CREATED },
+            }),
+            this.redemptionsRepo.count({
+              where: { offerId: offer.id, status: RedemptionStatus.CONFIRMED },
+            }),
+            this.redemptionsRepo.count({
+              where: { offerId: offer.id, status: RedemptionStatus.USED },
+            }),
+            this.redemptionsRepo.count({
+              where: { offerId: offer.id, status: RedemptionStatus.EXPIRED },
+            }),
+            this.redemptionsRepo.count({
+              where: { offerId: offer.id, status: RedemptionStatus.CANCELLED },
+            }),
+            this.moderationTasksRepo.find({
+              where: {
+                entityType: ModerationEntityType.OFFER,
+                entityId: offer.id,
+              },
+              order: { createdAt: "DESC" },
+              relations: {
+                assignedAdminUser: true,
+                resolvedByUser: true,
+              },
+            }),
+          ]);
+
+          return {
+            partner: {
+              id: partner.id,
+              brandName: partner.brandName,
+              status: partner.status,
+            },
+            offer: {
+              id: offer.id,
+              partnerId: offer.partnerId,
+              categoryId: offer.categoryId,
+              title: offer.title,
+              slug: offer.slug,
+              shortDescription: offer.shortDescription,
+              description: offer.description,
+              terms: offer.terms,
+              benefitType: offer.benefitType,
+              discountType: offer.discountType,
+              discountValue: offer.discountValue,
+              cashbackPercent: offer.cashbackPercent,
+              bonusRewardPoints: offer.bonusRewardPoints,
+              minPurchaseAmount: offer.minPurchaseAmount,
+              usageLimitPerUser: offer.usageLimitPerUser,
+              totalUsageLimit: offer.totalUsageLimit,
+              startAt: offer.startAt,
+              endAt: offer.endAt,
+              status: offer.status,
+              isFeatured: offer.isFeatured,
+              publishedAt: offer.publishedAt,
+              createdAt: offer.createdAt,
+              updatedAt: offer.updatedAt,
+              category: offer.category
+                ? {
+                    id: offer.category.id,
+                    name: offer.category.name,
+                    slug: offer.category.slug,
+                  }
+                : null,
+              locations: (offer.offerLocations ?? [])
+                .filter((offerLocation) => Boolean(offerLocation.location))
+                .map((offerLocation) => ({
+                  id: offerLocation.location.id,
+                  name: offerLocation.location.name,
+                  city: offerLocation.location.city,
+                  address: offerLocation.location.address,
+                  latitude: offerLocation.location.latitude,
+                  longitude: offerLocation.location.longitude,
+                  isActive: offerLocation.location.isActive,
+                  offerLocationId: offerLocation.id,
+                })),
+            },
+            redemptionsSummary: {
+              total: totalRedemptions,
+              created: createdRedemptions,
+              confirmed: confirmedRedemptions,
+              used: usedRedemptions,
+              expired: expiredRedemptions,
+              cancelled: cancelledRedemptions,
+            },
+            moderationRequests: moderationTasks.map((task) => ({
+              id: task.id,
+              status: task.status,
+              decision: task.decision,
+              decisionComment: task.decisionComment,
+              entityType: task.entityType,
+              entityId: task.entityId,
+              assignedAdmin: task.assignedAdminUser
+                ? {
+                    id: task.assignedAdminUser.id,
+                    email: task.assignedAdminUser.email,
+                    displayName: task.assignedAdminUser.displayName,
+                  }
+                : null,
+              resolvedBy: task.resolvedByUser
+                ? {
+                    id: task.resolvedByUser.id,
+                    email: task.resolvedByUser.email,
+                    displayName: task.resolvedByUser.displayName,
+                  }
+                : null,
+              resolvedAt: task.resolvedAt,
+              createdAt: task.createdAt,
+              updatedAt: task.updatedAt,
+            })),
+          };
+        }),
+
       submitOfferForReview: protectedProcedure
         .input(z.object({ offerId: z.string().uuid() }))
         .mutation(async ({ ctx, input }) => {
