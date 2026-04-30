@@ -5,6 +5,10 @@ import { randomUUID } from "node:crypto";
 import { In, Repository } from "typeorm";
 import {
   AuditLog,
+  ModerationDecision,
+  ModerationEntityType,
+  ModerationTask,
+  ModerationTaskStatus,
   Offer,
   OfferBenefitType,
   OfferCategory,
@@ -53,6 +57,8 @@ export class BusinessRouter {
     private readonly usersRepo: Repository<User>,
     @InjectRepository(StudentVerification)
     private readonly studentVerificationsRepo: Repository<StudentVerification>,
+    @InjectRepository(ModerationTask)
+    private readonly moderationTasksRepo: Repository<ModerationTask>,
     @InjectRepository(AuditLog)
     private readonly auditLogsRepo: Repository<AuditLog>
   ) {}
@@ -193,6 +199,115 @@ export class BusinessRouter {
     } catch {
       // Audit logging must not break partner/business flow.
     }
+  }
+
+  private async createModerationTaskIfMissing(input: {
+    entityType: ModerationEntityType;
+    entityId: string;
+    actorUserId: string;
+    actorRole: string;
+    partnerId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }): Promise<ModerationTask> {
+    const existing = await this.moderationTasksRepo.findOne({
+      where: {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        status: In([
+          ModerationTaskStatus.PENDING,
+          ModerationTaskStatus.IN_REVIEW,
+        ]),
+      },
+      order: { createdAt: "DESC" },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const task = this.moderationTasksRepo.create({
+      entityType: input.entityType,
+      entityId: input.entityId,
+      status: ModerationTaskStatus.PENDING,
+      assignedAdminId: null,
+      decision: null,
+      decisionComment: null,
+      resolvedByUserId: null,
+      resolvedAt: null,
+    });
+
+    const saved = await this.moderationTasksRepo.save(task);
+
+    await this.writeBusinessAuditLog({
+      actorUserId: input.actorUserId,
+      actorRole: input.actorRole,
+      action: "moderation.task_created",
+      entityType: "moderation_task",
+      entityId: saved.id,
+      partnerId: input.partnerId ?? null,
+      metadata: {
+        targetEntityType: input.entityType,
+        targetEntityId: input.entityId,
+        ...(input.metadata ?? {}),
+      },
+    });
+
+    return saved;
+  }
+
+  private async resolveModerationTaskForEntity(input: {
+    entityType: ModerationEntityType;
+    entityId: string;
+    adminUserId: string;
+    decision: ModerationDecision;
+    comment?: string | null;
+  }): Promise<ModerationTask | null> {
+    const task = await this.moderationTasksRepo.findOne({
+      where: {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        status: In([
+          ModerationTaskStatus.PENDING,
+          ModerationTaskStatus.IN_REVIEW,
+        ]),
+      },
+      order: { createdAt: "DESC" },
+    });
+
+    if (!task) {
+      return null;
+    }
+
+    task.status =
+      input.decision === ModerationDecision.APPROVE
+        ? ModerationTaskStatus.APPROVED
+        : input.decision === ModerationDecision.REJECT
+          ? ModerationTaskStatus.REJECTED
+          : ModerationTaskStatus.CANCELLED;
+    task.decision = input.decision;
+    task.decisionComment = input.comment ?? null;
+    task.resolvedByUserId = input.adminUserId;
+    task.resolvedAt = new Date();
+
+    const saved = await this.moderationTasksRepo.save(task);
+
+    await this.writeBusinessAuditLog({
+      actorUserId: input.adminUserId,
+      actorRole: "admin",
+      action: "moderation.task_resolved",
+      entityType: "moderation_task",
+      entityId: saved.id,
+      partnerId: null,
+      metadata: {
+        targetEntityType: input.entityType,
+        targetEntityId: input.entityId,
+        decision: input.decision,
+        comment: input.comment ?? null,
+        status: saved.status,
+      },
+    });
+
+    return saved;
   }
 
   private async requireMyPartner(ctx: {
@@ -513,6 +628,28 @@ export class BusinessRouter {
         reason: input.reason ?? null,
       },
     });
+
+    if (input.actorRole === "admin") {
+      const moderationDecision =
+        saved.status === OfferStatus.APPROVED ||
+        saved.status === OfferStatus.PUBLISHED
+          ? ModerationDecision.APPROVE
+          : saved.status === OfferStatus.REJECTED
+            ? ModerationDecision.REJECT
+            : saved.status === OfferStatus.ARCHIVED
+              ? ModerationDecision.CANCEL
+              : null;
+
+      if (moderationDecision) {
+        await this.resolveModerationTaskForEntity({
+          entityType: ModerationEntityType.OFFER,
+          entityId: saved.id,
+          adminUserId: input.actorUserId,
+          decision: moderationDecision,
+          comment: input.reason ?? null,
+        });
+      }
+    }
 
     return saved;
   }
@@ -1347,6 +1484,20 @@ export class BusinessRouter {
                 source: "create_offer",
               },
             });
+
+            await this.createModerationTaskIfMissing({
+              entityType: ModerationEntityType.OFFER,
+              entityId: saved.id,
+              actorUserId: user.id,
+              actorRole: membership.memberRole,
+              partnerId: partner.id,
+              metadata: {
+                title: saved.title,
+                slug: saved.slug,
+                source: "create_offer",
+                newStatus: saved.status,
+              },
+            });
           }
 
           return {
@@ -1493,11 +1644,137 @@ export class BusinessRouter {
             },
           });
 
+          await this.createModerationTaskIfMissing({
+            entityType: ModerationEntityType.OFFER,
+            entityId: saved.id,
+            actorUserId: user.id,
+            actorRole: membership.memberRole,
+            partnerId: partner.id,
+            metadata: {
+              title: saved.title,
+              slug: saved.slug,
+              source: "submit_offer_for_review",
+              previousStatus,
+              newStatus: saved.status,
+            },
+          });
+
           return {
             id: saved.id,
             title: saved.title,
             slug: saved.slug,
             status: saved.status,
+          };
+        }),
+
+      listRequests: protectedProcedure
+        .input(
+          z
+            .object({
+              limit: z.number().int().min(1).max(100).default(50),
+              offset: z.number().int().min(0).default(0),
+            })
+            .optional()
+        )
+        .query(async ({ ctx, input }) => {
+          const { partner, membership } = await this.requireMyPartner(ctx);
+          this.assertPartnerReadOnlyOrManageAccess(membership);
+
+          const partnerOffers = await this.offersRepo.find({
+            where: { partnerId: partner.id },
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          });
+
+          const offerIds = partnerOffers.map((offer) => offer.id);
+
+          if (offerIds.length === 0) {
+            return {
+              partner: {
+                id: partner.id,
+                brandName: partner.brandName,
+                status: partner.status,
+              },
+              total: 0,
+              limit: input?.limit ?? 50,
+              offset: input?.offset ?? 0,
+              items: [],
+            };
+          }
+
+          const [tasks, total] = await this.moderationTasksRepo.findAndCount({
+            where: {
+              entityType: ModerationEntityType.OFFER,
+              entityId: In(offerIds),
+            },
+            order: { createdAt: "DESC" },
+            take: input?.limit ?? 50,
+            skip: input?.offset ?? 0,
+            relations: {
+              assignedAdminUser: true,
+              resolvedByUser: true,
+            },
+          });
+
+          const offersMap = new Map(
+            partnerOffers.map((offer) => [offer.id, offer])
+          );
+
+          return {
+            partner: {
+              id: partner.id,
+              brandName: partner.brandName,
+              status: partner.status,
+            },
+            total,
+            limit: input?.limit ?? 50,
+            offset: input?.offset ?? 0,
+            items: tasks.map((task) => {
+              const offer = offersMap.get(task.entityId) ?? null;
+
+              return {
+                id: task.id,
+                type: "offer_publication",
+                status: task.status,
+                decision: task.decision,
+                decisionComment: task.decisionComment,
+                entityType: task.entityType,
+                entityId: task.entityId,
+                createdAt: task.createdAt,
+                updatedAt: task.updatedAt,
+                resolvedAt: task.resolvedAt,
+                assignedAdmin: task.assignedAdminUser
+                  ? {
+                      id: task.assignedAdminUser.id,
+                      email: task.assignedAdminUser.email,
+                      displayName: task.assignedAdminUser.displayName,
+                    }
+                  : null,
+                resolvedBy: task.resolvedByUser
+                  ? {
+                      id: task.resolvedByUser.id,
+                      email: task.resolvedByUser.email,
+                      displayName: task.resolvedByUser.displayName,
+                    }
+                  : null,
+                offer: offer
+                  ? {
+                      id: offer.id,
+                      title: offer.title,
+                      slug: offer.slug,
+                      status: offer.status,
+                      createdAt: offer.createdAt,
+                      updatedAt: offer.updatedAt,
+                    }
+                  : null,
+              };
+            }),
           };
         }),
 
