@@ -26,6 +26,14 @@ function parseOptionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function fieldClass(): string {
+  return "mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]";
+}
+
+function textAreaClass(): string {
+  return "mt-2 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-3 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]";
+}
+
 function formatDateTime(value?: Date | string | null): string {
   if (!value) {
     return "—";
@@ -36,10 +44,14 @@ function formatDateTime(value?: Date | string | null): string {
 
 function coordinateText(value?: string | number | null): string {
   if (value === null || value === undefined || value === "") {
-    return "—";
+    return "Не указано";
   }
 
   return String(value);
+}
+
+function hasCoordinates(location: PartnerLocation): boolean {
+  return Boolean(location.latitude || location.longitude);
 }
 
 function statusClass(isActive?: boolean | null): string {
@@ -124,6 +136,7 @@ function MetricCard({
         "ub-animate-fade-up rounded-[30px] border border-white/15 bg-[linear-gradient(135deg,#17384B_0%,#255B73_70%,#FF9F8A_150%)] p-5 text-white shadow-[0_18px_42px_rgba(23,56,75,0.16)]",
         index === 1 ? "ub-delay-100" : "",
         index === 2 ? "ub-delay-200" : "",
+        index === 3 ? "ub-delay-300" : "",
       ].join(" ")}
     >
       <p className="text-sm font-bold text-[#DDE8EA]">{label}</p>
@@ -163,25 +176,52 @@ function LocationCard({ location }: { location: PartnerLocation }): JSX.Element 
         {addressText || "Адрес не указан"}
       </p>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-[#F9FAF8] p-4">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
-            Latitude
-          </p>
+      <div className="mt-5 rounded-[24px] border border-[#E5ECE9] bg-[#F9FAF8] p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Геоданные
+            </p>
 
-          <p className="mt-1 break-all font-bold text-[#17384B]">
-            {coordinateText(location.latitude)}
-          </p>
+            <p className="mt-1 text-sm font-bold text-[#17384B]">
+              {hasCoordinates(location)
+                ? "Координаты указаны"
+                : "Координаты не указаны"}
+            </p>
+          </div>
+
+          <span
+            className={[
+              "rounded-2xl px-3 py-1 text-xs font-black",
+              hasCoordinates(location)
+                ? "bg-green-50 text-green-700"
+                : "bg-[#F7F6F1] text-[#526470]",
+            ].join(" ")}
+          >
+            {hasCoordinates(location) ? "geo ready" : "optional"}
+          </span>
         </div>
 
-        <div className="rounded-2xl bg-[#F9FAF8] p-4">
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
-            Longitude
-          </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl bg-white p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Latitude
+            </p>
 
-          <p className="mt-1 break-all font-bold text-[#17384B]">
-            {coordinateText(location.longitude)}
-          </p>
+            <p className="mt-1 break-all font-bold text-[#17384B]">
+              {coordinateText(location.latitude)}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4">
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Longitude
+            </p>
+
+            <p className="mt-1 break-all font-bold text-[#17384B]">
+              {coordinateText(location.longitude)}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -215,6 +255,7 @@ export default function PartnerLocationsPage(): JSX.Element {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [search, setSearch] = useState("");
+  const [showAdvancedGeo, setShowAdvancedGeo] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -261,8 +302,8 @@ export default function PartnerLocationsPage(): JSX.Element {
   const inactiveLocations = locations.filter(
     (location) => location.isActive === false
   ).length;
-  const withCoordinates = locations.filter(
-    (location) => location.latitude || location.longitude
+  const withCoordinates = locations.filter((location) =>
+    hasCoordinates(location)
   ).length;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -287,6 +328,7 @@ export default function PartnerLocationsPage(): JSX.Element {
       setAddress("");
       setLatitude("");
       setLongitude("");
+      setShowAdvancedGeo(false);
 
       await locationsQuery.refetch();
     } catch (caughtError) {
@@ -321,8 +363,8 @@ export default function PartnerLocationsPage(): JSX.Element {
             </h1>
 
             <p className="mt-4 max-w-2xl text-base leading-8 text-[#DDE8EA]">
-              Управляйте адресами, где действуют скидки. Эти точки используются
-              при создании оффера и выборе места применения QR-кода.
+              Управляйте адресами, где действуют скидки. Координаты оставлены
+              как дополнительное поле для будущей карты и поиска скидок рядом.
             </p>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -412,87 +454,132 @@ export default function PartnerLocationsPage(): JSX.Element {
             </h2>
 
             <p className="mt-3 text-sm leading-7 text-[#6B7280]">
-              Укажи название филиала, город, адрес и координаты. Координаты
-              необязательны, но полезны для будущей карты.
+              Для создания точки достаточно названия, города и адреса.
+              Координаты необязательны и нужны только для будущей карты.
             </p>
           </div>
 
           <div className="mt-6 grid gap-4">
-            <label>
-              <span className="text-sm font-black text-[#17384B]">
-                Название точки *
-              </span>
+            <section className="rounded-[28px] border border-[#E5ECE9] bg-white p-5">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
+                Основные данные
+              </p>
 
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                minLength={2}
-                placeholder="Coffee Lab Satbayev"
-                className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-              />
-            </label>
+              <div className="mt-5 grid gap-4">
+                <label>
+                  <span className="text-sm font-black text-[#17384B]">
+                    Название точки *
+                  </span>
 
-            <label>
-              <span className="text-sm font-black text-[#17384B]">Город</span>
+                  <input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    required
+                    minLength={2}
+                    placeholder="Coffee Lab Satbayev"
+                    className={fieldClass()}
+                  />
+                </label>
 
-              <input
-                value={city}
-                onChange={(event) => setCity(event.target.value)}
-                placeholder="Almaty"
-                className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-              />
-            </label>
+                <label>
+                  <span className="text-sm font-black text-[#17384B]">
+                    Город
+                  </span>
 
-            <label>
-              <span className="text-sm font-black text-[#17384B]">Адрес *</span>
+                  <input
+                    value={city}
+                    onChange={(event) => setCity(event.target.value)}
+                    placeholder="Almaty"
+                    className={fieldClass()}
+                  />
+                </label>
 
-              <textarea
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                required
-                minLength={5}
-                rows={3}
-                placeholder="улица Сатпаева, рядом с кампусом"
-                className="mt-2 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-3 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-              />
-            </label>
+                <label>
+                  <span className="text-sm font-black text-[#17384B]">
+                    Адрес *
+                  </span>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Latitude
+                  <textarea
+                    value={address}
+                    onChange={(event) => setAddress(event.target.value)}
+                    required
+                    minLength={5}
+                    rows={3}
+                    placeholder="улица Сатпаева, рядом с кампусом"
+                    className={textAreaClass()}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-[#FFE0D8] bg-[#FFF7F4] p-5">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedGeo((current) => !current)}
+                className="flex w-full items-center justify-between gap-4 text-left"
+              >
+                <span>
+                  <span className="block text-sm font-black uppercase tracking-[0.18em] text-[#FF7F6E]">
+                    Дополнительно
+                  </span>
+
+                  <span className="mt-1 block text-sm leading-6 text-[#8A4B3F]">
+                    Latitude / Longitude нужны для карты и поиска скидок рядом.
+                    Для демо они необязательны.
+                  </span>
                 </span>
 
-                <input
-                  value={latitude}
-                  onChange={(event) => setLatitude(event.target.value)}
-                  type="number"
-                  min="-90"
-                  max="90"
-                  step="0.000001"
-                  placeholder="43.238949"
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-                />
-              </label>
-
-              <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Longitude
+                <span className="shrink-0 rounded-2xl bg-white px-3 py-2 text-xs font-black text-[#17384B]">
+                  {showAdvancedGeo ? "Скрыть" : "Показать"}
                 </span>
+              </button>
 
-                <input
-                  value={longitude}
-                  onChange={(event) => setLongitude(event.target.value)}
-                  type="number"
-                  min="-180"
-                  max="180"
-                  step="0.000001"
-                  placeholder="76.889709"
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-                />
-              </label>
-            </div>
+              {showAdvancedGeo && (
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <label>
+                    <span className="text-sm font-black text-[#17384B]">
+                      Latitude
+                    </span>
+
+                    <input
+                      value={latitude}
+                      onChange={(event) => setLatitude(event.target.value)}
+                      type="number"
+                      min="-90"
+                      max="90"
+                      step="0.000001"
+                      placeholder="43.238949"
+                      className={fieldClass()}
+                    />
+
+                    <span className="mt-1 block text-xs leading-5 text-[#8A4B3F]">
+                      Широта. Например, для Алматы: 43.238949.
+                    </span>
+                  </label>
+
+                  <label>
+                    <span className="text-sm font-black text-[#17384B]">
+                      Longitude
+                    </span>
+
+                    <input
+                      value={longitude}
+                      onChange={(event) => setLongitude(event.target.value)}
+                      type="number"
+                      min="-180"
+                      max="180"
+                      step="0.000001"
+                      placeholder="76.889709"
+                      className={fieldClass()}
+                    />
+
+                    <span className="mt-1 block text-xs leading-5 text-[#8A4B3F]">
+                      Долгота. Например, для Алматы: 76.889709.
+                    </span>
+                  </label>
+                </div>
+              )}
+            </section>
 
             {message && (
               <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
@@ -538,7 +625,7 @@ export default function PartnerLocationsPage(): JSX.Element {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Название, город, адрес..."
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FFB5A4] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
+                  className={fieldClass()}
                 />
               </label>
             </div>
