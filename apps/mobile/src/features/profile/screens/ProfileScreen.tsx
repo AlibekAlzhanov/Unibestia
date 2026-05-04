@@ -10,6 +10,7 @@ import { spacing } from "../../../shared/theme/spacing";
 import { AppButton } from "../../../shared/ui/AppButton";
 import { AppCard } from "../../../shared/ui/AppCard";
 import { AppText } from "../../../shared/ui/AppText";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { Screen } from "../../../shared/ui/Screen";
 import { StateView } from "../../../shared/ui/StateView";
 import { ScreenHeader } from "../../../shared/ui/ScreenHeader";
@@ -88,12 +89,10 @@ export function ProfileScreen({ navigation }: Props) {
       {profileQuery.isLoading ? (
         <StateView title="Загружаем профиль" loading />
       ) : profileQuery.error ? (
-        <StateView
-          title="Не удалось загрузить профиль"
-          description={profileQuery.error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={() => profileQuery.refetch()}
+        <ErrorStateView
+          error={profileQuery.error}
+          fallbackTitle="Не удалось загрузить профиль"
+          onRetry={() => profileQuery.refetch()}
         />
       ) : (
         <View style={styles.content}>

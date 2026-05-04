@@ -7,6 +7,7 @@ import { ReviewAfterQrCard } from "../../../features/reviews/ui/ReviewAfterQrCar
 import { useRefresh } from "../../../shared/hooks/useRefresh";
 import { spacing } from "../../../shared/theme/spacing";
 import { AppButton } from "../../../shared/ui/AppButton";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { Screen } from "../../../shared/ui/Screen";
 import { ScreenHeader } from "../../../shared/ui/ScreenHeader";
 import { StateView } from "../../../shared/ui/StateView";
@@ -54,12 +55,10 @@ export function QRDetailsScreen({ navigation, route }: Props) {
       {redemptionQuery.isLoading ? (
         <StateView title="Загружаем QR" loading />
       ) : redemptionQuery.error ? (
-        <StateView
-          title="Не удалось загрузить QR"
-          description={redemptionQuery.error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={() => redemptionQuery.refetch()}
+        <ErrorStateView
+          error={redemptionQuery.error}
+          fallbackTitle="Не удалось загрузить QR"
+          onRetry={() => redemptionQuery.refetch()}
         />
       ) : redemption ? (
         <View style={styles.content}>
