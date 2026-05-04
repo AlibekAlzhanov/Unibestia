@@ -125,6 +125,7 @@ export class AdminStudentVerificationsRouter {
     const studentProfile = item.studentProfile ?? null;
     const user = item.user ?? null;
     const university = studentProfile?.university ?? null;
+    const educationProgramGroup = studentProfile?.educationProgramGroup ?? null;
     const reviewedBy = item.reviewedBy ?? null;
 
     return {
@@ -157,7 +158,19 @@ export class AdminStudentVerificationsRouter {
             verificationStatus: studentProfile.verificationStatus,
             studentEmail: studentProfile.studentEmail,
             degree: studentProfile.degree,
+            educationProgramGroupId: studentProfile.educationProgramGroupId,
             specialty: studentProfile.specialty,
+            educationProgramGroup: educationProgramGroup
+              ? {
+                  id: educationProgramGroup.id,
+                  code: educationProgramGroup.code,
+                  nameRu: educationProgramGroup.nameRu,
+                  nameKz: educationProgramGroup.nameKz,
+                  nameEn: educationProgramGroup.nameEn,
+                  degree: educationProgramGroup.degree,
+                  isActive: educationProgramGroup.isActive,
+                }
+              : null,
             course: studentProfile.course,
             admissionDate: studentProfile.admissionDate,
             verifiedAt: studentProfile.verifiedAt,
@@ -197,6 +210,7 @@ export class AdminStudentVerificationsRouter {
       .leftJoin("verification.user", "user")
       .leftJoin("verification.studentProfile", "studentProfile")
       .leftJoin("studentProfile.university", "university")
+      .leftJoin("studentProfile.educationProgramGroup", "educationProgramGroup")
       .leftJoin("verification.reviewedBy", "reviewedBy")
       .select([
         "verification.id",
@@ -222,6 +236,7 @@ export class AdminStudentVerificationsRouter {
         "studentProfile.verificationStatus",
         "studentProfile.studentEmail",
         "studentProfile.degree",
+        "studentProfile.educationProgramGroupId",
         "studentProfile.specialty",
         "studentProfile.course",
         "studentProfile.admissionDate",
@@ -234,6 +249,14 @@ export class AdminStudentVerificationsRouter {
         "university.city",
         "university.country",
         "university.status",
+
+        "educationProgramGroup.id",
+        "educationProgramGroup.code",
+        "educationProgramGroup.nameRu",
+        "educationProgramGroup.nameKz",
+        "educationProgramGroup.nameEn",
+        "educationProgramGroup.degree",
+        "educationProgramGroup.isActive",
 
         "reviewedBy.id",
         "reviewedBy.email",
@@ -288,6 +311,7 @@ export class AdminStudentVerificationsRouter {
         user: true,
         studentProfile: {
           university: true,
+          educationProgramGroup: true,
         },
         reviewedBy: true,
       },

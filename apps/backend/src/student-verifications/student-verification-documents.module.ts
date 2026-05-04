@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
+  EducationProgramGroup,
   Role,
   StudentProfile,
   StudentVerification,
@@ -23,6 +24,7 @@ import { StorageModule } from "../storage/storage.module.js";
       StudentVerification,
       University,
       UniversityEmailDomain,
+      EducationProgramGroup,
     ]),
   ],
   controllers: [StudentVerificationDocumentsController],

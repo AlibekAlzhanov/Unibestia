@@ -25,6 +25,22 @@ export class University {
   @Column("varchar", { name: "short_name", length: 100, nullable: true })
   shortName: string | null;
 
+  @Column("text", { name: "official_name_ru", nullable: true })
+  officialNameRu: string | null;
+
+  @Column("text", { name: "official_name_kz", nullable: true })
+  officialNameKz: string | null;
+
+  @Column("text", { name: "official_name_en", nullable: true })
+  officialNameEn: string | null;
+
+  @Column("text", {
+    name: "document_keywords",
+    array: true,
+    nullable: true,
+  })
+  documentKeywords: string[] | null;
+
   @Column("varchar", { length: 100, nullable: true })
   city: string | null;
 
@@ -44,7 +60,10 @@ export class University {
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt: Date;
 
-  @OneToMany(() => UniversityEmailDomain, (universityEmailDomain) => universityEmailDomain.university)
+  @OneToMany(
+    () => UniversityEmailDomain,
+    (universityEmailDomain) => universityEmailDomain.university
+  )
   emailDomains: UniversityEmailDomain[];
 
   @OneToMany(() => StudentProfile, (studentProfile) => studentProfile.university)

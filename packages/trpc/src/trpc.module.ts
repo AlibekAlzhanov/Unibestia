@@ -4,6 +4,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { PostHogModule } from "@repo/analytics";
 import {
   AuditLog,
+  EducationProgramGroup,
   FavoriteOffer,
   ModerationTask,
   Notification,
@@ -40,10 +41,12 @@ import { AdminStudentVerificationsRouter } from "./routers/routers/admin-student
 import { AuthRouter } from "./routers/routers/auth.router.js";
 import { BusinessRouter } from "./routers/routers/business.router.js";
 import { CatalogRouter } from "./routers/routers/catalog.router.js";
+import { EducationProgramsRouter } from "./routers/routers/education-programs.router.js";
 import { NotificationsRouter } from "./routers/routers/notifications.router.js";
 import { ProfileRouter } from "./routers/routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/routers/redemptions.router.js";
 import { ReferralsRouter } from "./routers/routers/referrals.router.js";
+import { UniversitiesRouter } from "./routers/routers/universities.router.js";
 import { WalletRouter } from "./routers/routers/wallet.router.js";
 
 @Module({
@@ -57,6 +60,7 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     RedemptionsModule,
     TypeOrmModule.forFeature([
       AuditLog,
+      EducationProgramGroup,
       FavoriteOffer,
       ModerationTask,
       Notification,
@@ -93,6 +97,8 @@ import { WalletRouter } from "./routers/routers/wallet.router.js";
     NotificationsRouter,
     ReferralsRouter,
     AdminStudentVerificationsRouter,
+    UniversitiesRouter,
+    EducationProgramsRouter,
     AuthService,
   ],
   exports: [TRPCService],

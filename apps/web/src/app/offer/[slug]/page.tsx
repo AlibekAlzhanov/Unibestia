@@ -82,6 +82,93 @@ type ReviewEligibility = {
   }>;
 };
 
+type VerificationGate = {
+  canCreateQr: boolean;
+  message: string;
+};
+
+function buildVerificationGate(profile: unknown): VerificationGate {
+  const record =
+    typeof profile === "object" && profile !== null
+      ? (profile as Record<string, unknown>)
+      : null;
+
+  const domainCheck =
+    typeof record?.allowedStudentEmailDomain === "object" &&
+    record.allowedStudentEmailDomain !== null
+      ? (record.allowedStudentEmailDomain as Record<string, unknown>)
+      : null;
+
+  if (domainCheck?.isAllowed !== true) {
+    return {
+      canCreateQr: false,
+      message:
+        "QR доступен только студентам с разрешённой студенческой почтой.",
+    };
+  }
+
+  const studentProfile =
+    typeof record?.studentProfile === "object" && record.studentProfile !== null
+      ? (record.studentProfile as Record<string, unknown>)
+      : null;
+
+  const verificationStatus =
+    typeof studentProfile?.verificationStatus === "string"
+      ? studentProfile.verificationStatus
+      : "unverified";
+
+  if (verificationStatus === "pending_review") {
+    return {
+      canCreateQr: false,
+      message:
+        "Документ на проверке. QR станет доступен после подтверждения администратором.",
+    };
+  }
+
+  if (verificationStatus === "rejected") {
+    return {
+      canCreateQr: false,
+      message:
+        "Студенческий статус отклонён. Обновите профиль и отправьте документ повторно.",
+    };
+  }
+
+  if (verificationStatus === "expired") {
+    return {
+      canCreateQr: false,
+      message:
+        "Подтверждение студенческого статуса истекло. Пройдите проверку повторно.",
+    };
+  }
+
+  const expiresAt =
+    typeof studentProfile?.verificationExpiresAt === "string" ||
+    studentProfile?.verificationExpiresAt instanceof Date
+      ? new Date(studentProfile.verificationExpiresAt).getTime()
+      : null;
+
+  if (verificationStatus === "verified" && expiresAt && expiresAt < Date.now()) {
+    return {
+      canCreateQr: false,
+      message:
+        "Подтверждение студенческого статуса истекло. Пройдите проверку повторно.",
+    };
+  }
+
+  if (verificationStatus !== "verified") {
+    return {
+      canCreateQr: false,
+      message:
+        "QR доступен только после подтверждения студенческого статуса администратором.",
+    };
+  }
+
+  return {
+    canCreateQr: true,
+    message: "Студенческий статус подтверждён. QR доступен.",
+  };
+}
+
 function formatBenefit(offer: {
   discountType?: string | null;
   discountValue?: string | null;
@@ -373,8 +460,9 @@ export default function OfferDetailsPage(): JSX.Element {
     | ReviewEligibility
     | undefined;
 
-  const isAllowedStudentEmail =
-    profileQuery.data?.allowedStudentEmailDomain?.isAllowed === true;
+  const verificationGate = buildVerificationGate(profileQuery.data);
+  const canCreateQr = verificationGate.canCreateQr;
+
 
   const coverMedia = useMemo(() => {
     const media = offer?.media ?? [];
@@ -404,7 +492,7 @@ export default function OfferDetailsPage(): JSX.Element {
   async function createQr(): Promise<void> {
     if (!offer) return;
 
-    if (!isAllowedStudentEmail) {
+    if (!canCreateQr) {
       setCreateError(
         "QR доступен только для аккаунта со студенческой почтой разрешённого домена."
       );
@@ -697,7 +785,7 @@ export default function OfferDetailsPage(): JSX.Element {
               <div className="mt-5 rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] p-4 text-sm leading-6 text-[#6B7280]">
                 Проверяем студенческий домен...
               </div>
-            ) : isAllowedStudentEmail ? (
+            ) : canCreateQr ? (
               <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
                 Студенческий домен разрешён:{" "}
                 {profileQuery.data?.allowedStudentEmailDomain.domain}
@@ -746,7 +834,7 @@ export default function OfferDetailsPage(): JSX.Element {
             <button
               type="button"
               onClick={createQr}
-              disabled={isCreating || !isAllowedStudentEmail}
+              disabled={isCreating || !canCreateQr}
               className="ub-gradient-button mt-5 w-full rounded-2xl px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isCreating ? "Создаём QR..." : "Получить QR"}

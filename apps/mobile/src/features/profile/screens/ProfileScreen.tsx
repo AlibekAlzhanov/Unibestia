@@ -25,8 +25,8 @@ import {
   degreeLabel,
   isAllowedStudentDomain,
   readDegree,
+  readEducationProgramGroupLabel,
   readPhone,
-  readSpecialty,
   readUniversityName,
   readVerificationReviewComment,
   readVerificationStatus,
@@ -163,10 +163,10 @@ export function ProfileScreen({ navigation }: Props) {
 
               <View style={styles.infoBox}>
                 <AppText variant="caption" color={colors.muted}>
-                  Специальность
+                  Группа образовательных программ
                 </AppText>
                 <AppText style={styles.infoValue}>
-                  {readSpecialty(profile) || "Не указано"}
+                  {readEducationProgramGroupLabel(profile) || "Не указано"}
                 </AppText>
               </View>
 

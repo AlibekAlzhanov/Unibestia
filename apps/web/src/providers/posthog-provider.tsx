@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, type ReactNode, Suspense } from "react";
+import { useEffect, type ReactElement, type ReactNode, Suspense } from "react";
 import posthog from "posthog-js";
 import { PostHogProvider as PHProvider, usePostHog } from "posthog-js/react";
 import { useUser } from "@clerk/nextjs";
@@ -22,7 +22,7 @@ interface PostHogProviderProps {
 }
 
 // User identification component to handle Clerk auth integration
-function PostHogUserIdentification(): JSX.Element | null {
+function PostHogUserIdentification(): ReactElement | null {
   const { user, isSignedIn } = useUser();
   const posthogClient = usePostHog();
 
@@ -43,7 +43,7 @@ function PostHogUserIdentification(): JSX.Element | null {
 }
 
 // Page view tracking component
-function PostHogPageView(): JSX.Element | null {
+function PostHogPageView(): ReactElement | null {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const posthogClient = usePostHog();
@@ -63,7 +63,7 @@ function PostHogPageView(): JSX.Element | null {
 }
 
 // Suspense wrapper for PostHogPageView to prevent client-side rendering opt-out
-function SuspendedTracking(): JSX.Element {
+function SuspendedTracking(): ReactElement {
   return (
     <Suspense fallback={null}>
       <PostHogPageView />
@@ -74,7 +74,7 @@ function SuspendedTracking(): JSX.Element {
 
 export function PostHogProvider({
   children,
-}: PostHogProviderProps): JSX.Element {
+}: PostHogProviderProps): ReactElement {
   return (
     <PHProvider client={posthog}>
       <SuspendedTracking />

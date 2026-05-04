@@ -1,5 +1,6 @@
 export * from "./auth/index.js";
 export * from "./university/index.js";
+export * from "./education/index.js";
 export * from "./student/index.js";
 export * from "./partner/index.js";
 export * from "./offer/index.js";
