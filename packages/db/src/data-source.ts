@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 
 import {
   AuditLog,
+  EducationProgramGroup,
   FavoriteOffer,
   ModerationTask,
   Notification,
@@ -91,6 +92,7 @@ export const entities = [
   UserRole,
   University,
   UniversityEmailDomain,
+  EducationProgramGroup,
   StudentProfile,
   StudentVerification,
   Partner,

@@ -13,6 +13,7 @@ import {
 } from "typeorm";
 import { User } from "../auth/user.entity.js";
 import { University } from "../university/university.entity.js";
+import { EducationProgramGroup } from "../education/education-program-group.entity.js";
 import { StudentVerification } from "./student-verification.entity.js";
 
 export enum StudentVerificationStatus {
@@ -35,6 +36,9 @@ export class StudentProfile {
 
   @Column("uuid", { name: "university_id", nullable: true })
   universityId: string | null;
+
+  @Column("uuid", { name: "education_program_group_id", nullable: true })
+  educationProgramGroupId: string | null;
 
   @Column("citext", { name: "student_email", nullable: true })
   studentEmail: string | null;
@@ -92,6 +96,20 @@ export class StudentProfile {
   @JoinColumn({ name: "university_id" })
   university: University | null;
 
-  @OneToMany(() => StudentVerification, (studentVerification) => studentVerification.studentProfile)
+  @ManyToOne(
+    () => EducationProgramGroup,
+    (educationProgramGroup) => educationProgramGroup.studentProfiles,
+    {
+      onDelete: "SET NULL",
+      nullable: true,
+    }
+  )
+  @JoinColumn({ name: "education_program_group_id" })
+  educationProgramGroup: EducationProgramGroup | null;
+
+  @OneToMany(
+    () => StudentVerification,
+    (studentVerification) => studentVerification.studentProfile
+  )
   verifications: StudentVerification[];
 }
