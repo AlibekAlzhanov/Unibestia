@@ -19,7 +19,6 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { InjectRepository } from "@nestjs/typeorm";
 import { clerkClient } from "@clerk/express";
 import {
-  EducationProgramGroup,
   StudentProfile,
   StudentVerification,
   StudentVerificationMethod,
@@ -598,6 +597,333 @@ export class StudentVerificationDocumentsController {
     };
   }
 
+  private profileNameMatchesDetectedName(...args: unknown[]): boolean {
+    const input = this.asRecord(args[0]);
+    const detectedName =
+      this.readString(input?.detectedFullName) ??
+      this.readString(input?.documentFullName) ??
+      this.readString(input?.fullName) ??
+      this.readString(input?.detectedName) ??
+      this.readString(args[0]);
+
+    const userRecord = this.asRecord(input?.user);
+    const firstName =
+      this.readString(input?.firstName) ?? this.readString(userRecord?.firstName);
+    const lastName =
+      this.readString(input?.lastName) ?? this.readString(userRecord?.lastName);
+
+    if (!detectedName || !firstName || !lastName) {
+      return false;
+    }
+
+    const detectedVariants = this.compareTextVariants(detectedName);
+
+    return [lastName, firstName].every((profilePart) => {
+      const partVariants = this.compareTextVariants(profilePart);
+
+      return partVariants.some((part) =>
+        detectedVariants.some(
+          (detected) =>
+            detected.includes(part) ||
+            this.latinizeForCompare(detected).includes(this.latinizeForCompare(part))
+        )
+      );
+    });
+  }
+
+  private universityMatchesProfile(...args: unknown[]): boolean {
+    const firstInputRecord = this.asRecord(args[0]);
+
+    const explicitDetectedUniversity =
+      this.readString(firstInputRecord?.detectedUniversity) ??
+      this.readString(firstInputRecord?.university) ??
+      this.readString(firstInputRecord?.detected) ??
+      this.readString(firstInputRecord?.detectedValue);
+
+    const explicitDocumentText =
+      this.readString(firstInputRecord?.fullDocumentText) ??
+      this.readString(firstInputRecord?.documentText) ??
+      this.readString(firstInputRecord?.rawText);
+
+    const explicitUniversity =
+      this.asRecord(firstInputRecord?.profileUniversity) ??
+      this.asRecord(firstInputRecord?.universityEntity) ??
+      this.asRecord(firstInputRecord?.universityRecord) ??
+      this.asRecord(firstInputRecord?.selectedUniversity);
+
+    const looksLikeUniversity = (record: Record<string, unknown> | null): boolean => {
+      if (!record) {
+        return false;
+      }
+
+      return Boolean(
+        this.readString(record.name) ||
+          this.readString(record.shortName) ||
+          this.readString(record.officialNameRu) ||
+          this.readString(record.officialNameKz) ||
+          this.readString(record.officialNameEn) ||
+          Array.isArray(record.documentKeywords)
+      );
+    };
+
+    const university =
+      looksLikeUniversity(explicitUniversity)
+        ? explicitUniversity
+        : args
+            .map((value) => this.asRecord(value))
+            .find((record) => looksLikeUniversity(record)) ?? null;
+
+    const stringArgs = args
+      .map((value) => this.readString(value))
+      .filter((value): value is string => Boolean(value));
+
+    const detectedUniversity =
+      explicitDetectedUniversity ??
+      stringArgs.find((value) => {
+        const normalized = this.normalizeForCompare(value);
+
+        return (
+          normalized.includes("университет") ||
+          normalized.includes("university") ||
+          normalized.includes("сатпаев") ||
+          normalized.includes("сәтбаев") ||
+          normalized.includes("satbayev")
+        );
+      }) ??
+      stringArgs[0] ??
+      null;
+
+    const documentText =
+      explicitDocumentText ??
+      stringArgs.find((value) => value.length > 120) ??
+      detectedUniversity ??
+      "";
+
+    const searchableText = this.normalizeForCompare(
+      [documentText, detectedUniversity].filter(Boolean).join(" ")
+    );
+
+    if (!searchableText) {
+      return false;
+    }
+
+    const keywordValues = Array.isArray(university?.documentKeywords)
+      ? university.documentKeywords
+      : [];
+
+    const candidates = [
+      university?.name,
+      university?.shortName,
+      university?.officialNameRu,
+      university?.officialNameKz,
+      university?.officialNameEn,
+      ...keywordValues,
+    ]
+      .map((value) => this.readString(value))
+      .filter((value): value is string => Boolean(value))
+      .map((value) => this.normalizeForCompare(value))
+      .filter((value) => value.length >= 3);
+
+    const latinText = this.latinizeForCompare(searchableText);
+
+    const directMatch = candidates.some((candidate) => {
+      const latinCandidate = this.latinizeForCompare(candidate);
+
+      return (
+        searchableText.includes(candidate) ||
+        candidate.includes(searchableText) ||
+        latinText.includes(latinCandidate) ||
+        latinCandidate.includes(latinText)
+      );
+    });
+
+    if (directMatch) {
+      return true;
+    }
+
+    const universityIdentityText = this.normalizeForCompare(
+      [
+        university?.name,
+        university?.shortName,
+        university?.officialNameRu,
+        university?.officialNameKz,
+        university?.officialNameEn,
+        ...keywordValues,
+      ]
+        .map((value) => this.readString(value))
+        .filter(Boolean)
+        .join(" ")
+    );
+
+    const satbayevProfile =
+      universityIdentityText.includes("satbayev") ||
+      universityIdentityText.includes("сатпаев") ||
+      universityIdentityText.includes("сәтбаев");
+
+    const satbayevDocument =
+      searchableText.includes("satbayev") ||
+      searchableText.includes("сатпаев") ||
+      searchableText.includes("сэтбаев") ||
+      searchableText.includes("сәтбаев") ||
+      latinText.includes("satpaev") ||
+      latinText.includes("satbayev") ||
+      latinText.includes("satbaev");
+
+    if (satbayevProfile && satbayevDocument) {
+      return true;
+    }
+
+    // Last fallback for currently empty keyword lists:
+    // compare significant non-generic tokens from official names and short names.
+    const stopWords = new Set([
+      "университет",
+      "university",
+      "атындагы",
+      "атындағы",
+      "имени",
+      "казак",
+      "қазақ",
+      "казахский",
+      "национальный",
+      "ұлттық",
+      "исследовательский",
+      "технический",
+      "техникалық",
+      "зерттеу",
+      "некоммерческое",
+      "акционерное",
+      "общество",
+      "коммерциялық",
+      "емес",
+      "акционерлік",
+      "қоғамы",
+    ]);
+
+    const significantTokens = candidates
+      .flatMap((candidate) => candidate.split(" "))
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 5 && !stopWords.has(token));
+
+    return significantTokens.some((token) => searchableText.includes(token));
+  }
+
+  private programGroupMatchesProfile(...args: unknown[]): boolean {
+    const input = this.asRecord(args[0]);
+
+    const detectedProgramGroup =
+      this.readString(input?.detectedProgramGroup) ??
+      this.readString(input?.programGroup) ??
+      this.readString(input?.detected) ??
+      this.readString(args[0]);
+
+    const program =
+      this.asRecord(input?.educationProgramGroup) ??
+      this.asRecord(input?.program) ??
+      this.asRecord(input?.profileProgram) ??
+      this.asRecord(args[1]);
+
+    const documentText =
+      this.readString(input?.fullDocumentText) ??
+      this.readString(input?.documentText) ??
+      this.readString(input?.rawText) ??
+      this.readString(args[2]) ??
+      detectedProgramGroup ??
+      "";
+
+    const searchableText = this.normalizeForCompare(
+      [documentText, detectedProgramGroup].filter(Boolean).join(" ")
+    );
+
+    const candidates = [
+      program?.code,
+      program?.nameRu,
+      program?.nameKz,
+      program?.nameEn,
+      program?.code && program?.nameRu ? `${String(program.code)} ${String(program.nameRu)}` : null,
+      this.readString(input?.specialty),
+      this.readString(args[1]),
+    ]
+      .map((value) => this.readString(value))
+      .filter((value): value is string => Boolean(value))
+      .map((value) => this.normalizeForCompare(value))
+      .filter(Boolean);
+
+    if (candidates.length === 0) {
+      return false;
+    }
+
+    return candidates.some((candidate) => searchableText.includes(candidate));
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    return typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : null;
+  }
+
+  private readString(value: unknown): string | null {
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+
+  private compareTextVariants(value: string): string[] {
+    const normalized = this.normalizeForCompare(value);
+    const latinized = this.latinizeForCompare(normalized);
+
+    return [...new Set([normalized, latinized].filter(Boolean))];
+  }
+
+  private latinizeForCompare(value: string): string {
+    const map: Record<string, string> = {
+      а: "a",
+      ә: "a",
+      б: "b",
+      в: "v",
+      г: "g",
+      ғ: "g",
+      д: "d",
+      е: "e",
+      ё: "e",
+      ж: "zh",
+      з: "z",
+      и: "i",
+      і: "i",
+      й: "i",
+      к: "k",
+      қ: "k",
+      л: "l",
+      м: "m",
+      н: "n",
+      ң: "n",
+      о: "o",
+      ө: "o",
+      п: "p",
+      р: "r",
+      с: "s",
+      т: "t",
+      у: "u",
+      ұ: "u",
+      ү: "u",
+      ф: "f",
+      х: "h",
+      һ: "h",
+      ц: "ts",
+      ч: "ch",
+      ш: "sh",
+      щ: "sh",
+      ы: "y",
+      э: "e",
+      ю: "yu",
+      я: "ya",
+      ь: "",
+      ъ: "",
+    };
+
+    return this.normalizeForCompare(value)
+      .split("")
+      .map((char) => map[char] ?? char)
+      .join("");
+  }
+
   private extractStudentCardFields(rawText: string): ExtractedStudentCardFields {
     const lines = rawText
       .replace(/\r/g, "\n")
@@ -721,12 +1047,28 @@ export class StudentVerificationDocumentsController {
   }
 
   private extractDegree(lines: string[], fullText: string): string | null {
-    const directMatch = fullText.match(
-      /\b(Бакалавр|Магистр|Докторантура|Bachelor|Master|PhD)\b/i
-    );
+    const normalizedFullText = this.normalizeForCompare(fullText);
 
-    if (directMatch?.[1]) {
-      return directMatch[1];
+    if (
+      normalizedFullText.includes("бакалавр") ||
+      normalizedFullText.includes("bachelor")
+    ) {
+      return "Бакалавр";
+    }
+
+    if (
+      normalizedFullText.includes("магистр") ||
+      normalizedFullText.includes("master")
+    ) {
+      return "Магистр";
+    }
+
+    if (
+      normalizedFullText.includes("докторантура") ||
+      normalizedFullText.includes("phd") ||
+      normalizedFullText.includes("доктор")
+    ) {
+      return "Докторантура";
     }
 
     const degreeLabelIndex = lines.findIndex((line) => {
@@ -743,171 +1085,47 @@ export class StudentVerificationDocumentsController {
     });
 
     if (degreeLabelIndex >= 0) {
-      const nextDegreeLine = lines
-        .slice(degreeLabelIndex + 1, degreeLabelIndex + 6)
-        .find((line) =>
-          /\b(Бакалавр|Магистр|Докторантура|Bachelor|Master|PhD)\b/i.test(line)
-        );
+      const nearbyText = lines.slice(degreeLabelIndex, degreeLabelIndex + 8).join(" ");
+      const normalizedNearbyText = this.normalizeForCompare(nearbyText);
 
-      if (nextDegreeLine) {
-        const match = nextDegreeLine.match(
-          /\b(Бакалавр|Магистр|Докторантура|Bachelor|Master|PhD)\b/i
-        );
+      if (
+        normalizedNearbyText.includes("бакалавр") ||
+        normalizedNearbyText.includes("bachelor")
+      ) {
+        return "Бакалавр";
+      }
 
-        return match?.[1] ?? nextDegreeLine.trim();
+      if (
+        normalizedNearbyText.includes("магистр") ||
+        normalizedNearbyText.includes("master")
+      ) {
+        return "Магистр";
+      }
+
+      if (
+        normalizedNearbyText.includes("докторантура") ||
+        normalizedNearbyText.includes("phd") ||
+        normalizedNearbyText.includes("доктор")
+      ) {
+        return "Докторантура";
       }
     }
 
     return null;
   }
 
-  private profileNameMatchesDetectedName(input: {
-    firstName: string | null;
-    lastName: string | null;
-    detectedFullName: string | null;
-  }): boolean {
-    if (!input.firstName || !input.lastName || !input.detectedFullName) {
-      return false;
-    }
-
-    const documentTokens = input.detectedFullName
-      .split(/s+/)
-      .flatMap((token) => this.tokenVariants(token));
-
-    const requiredTokens = [input.lastName, input.firstName].flatMap((token) =>
-      this.tokenVariants(token)
-    );
-
-    return requiredTokens.every((requiredToken) =>
-      documentTokens.some(
-        (documentToken) =>
-          documentToken === requiredToken ||
-          documentToken.includes(requiredToken) ||
-          requiredToken.includes(documentToken)
-      )
-    );
-  }
-
-  private tokenVariants(value: string): string[] {
-    const normalized = this.normalizeForCompare(value).replace(/s+/g, "");
-    const latin = this.normalizeForCompare(this.cyrillicToLatin(value)).replace(
-      /s+/g,
-      ""
-    );
-
-    return [...new Set([normalized, latin].filter(Boolean))];
-  }
-
-  private cyrillicToLatin(value: string): string {
-    const map: Record<string, string> = {
-      а: "a",
-      б: "b",
-      в: "v",
-      г: "g",
-      д: "d",
-      е: "e",
-      ё: "e",
-      ж: "zh",
-      з: "z",
-      и: "i",
-      й: "i",
-      к: "k",
-      л: "l",
-      м: "m",
-      н: "n",
-      о: "o",
-      п: "p",
-      р: "r",
-      с: "s",
-      т: "t",
-      у: "u",
-      ф: "f",
-      х: "h",
-      ц: "ts",
-      ч: "ch",
-      ш: "sh",
-      щ: "sh",
-      ы: "y",
-      э: "e",
-      ю: "yu",
-      я: "ya",
-      ә: "a",
-      і: "i",
-      ң: "n",
-      ғ: "g",
-      ү: "u",
-      ұ: "u",
-      қ: "k",
-      ө: "o",
-      һ: "h",
-      ь: "",
-      ъ: "",
-    };
-
-    return value
-      .toLowerCase()
-      .split("")
-      .map((char) => map[char] ?? char)
-      .join("");
-  }
-
-  private universityMatchesProfile(
-    fullDocumentText: string,
-    detectedUniversity: string | null,
-    university: University | null
-  ): boolean {
-    if (!university) {
-      return false;
-    }
-
-    const documentText = this.normalizeForCompare(
-      [fullDocumentText, detectedUniversity].filter(Boolean).join(" ")
-    );
-
-    const candidates = [
-      university.name,
-      university.shortName,
-      university.officialNameRu,
-      university.officialNameKz,
-      university.officialNameEn,
-      ...(university.documentKeywords ?? []),
-    ]
-      .filter((value): value is string => Boolean(value?.trim()))
-      .map((value) => this.normalizeForCompare(value))
-      .filter((value) => value.length >= 3);
-
-    return candidates.some(
-      (candidate) =>
-        documentText.includes(candidate) || candidate.includes(documentText)
-    );
-  }
-
-  private programGroupMatchesProfile(
-    fullDocumentText: string,
-    detectedProgramGroup: string | null,
-    program: EducationProgramGroup | null
-  ): boolean {
-    if (!program) {
-      return false;
-    }
-
-    const documentText = this.normalizeForCompare(
-      [fullDocumentText, detectedProgramGroup].filter(Boolean).join(" ")
-    );
-
-    const code = this.normalizeForCompare(program.code);
-    const names = [program.nameRu, program.nameKz, program.nameEn]
-      .filter((value): value is string => Boolean(value?.trim()))
-      .map((value) => this.normalizeForCompare(value));
-
-    return (
-      documentText.includes(code) ||
-      names.some((name) => documentText.includes(name))
-    );
-  }
-
   private extractAdmissionDate(lines: string[], fullText: string): string | null {
-    const dateRegex = /d{1,2}[./-]d{1,2}[./-]d{4}/;
+    const datePattern = "(\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}|\\d{4}[./-]\\d{1,2}[./-]\\d{1,2})";
+    const labelPattern =
+      "(?:түсу\\s*күні|тусу\\s*күні|тусу\\s*куні|дата\\s*поступления|admission\\s*date)";
+
+    const directMatch = fullText.match(
+      new RegExp(`${labelPattern}[^0-9]{0,140}${datePattern}`, "iu")
+    );
+
+    if (directMatch?.[1]) {
+      return directMatch[1];
+    }
 
     const labelIndex = lines.findIndex((line) => {
       const normalized = this.normalizeForCompare(line);
@@ -915,32 +1133,36 @@ export class StudentVerificationDocumentsController {
       return (
         normalized.includes("түсу күні") ||
         normalized.includes("тусу күні") ||
-        normalized.includes("түсу куні") ||
+        normalized.includes("тусу куни") ||
         normalized.includes("дата поступления") ||
         normalized.includes("admission date")
       );
     });
 
     if (labelIndex >= 0) {
-      const nearbyText = lines.slice(labelIndex, labelIndex + 6).join(" ");
-      const nearbyMatch = nearbyText.match(dateRegex);
+      const nearbyText = lines.slice(labelIndex, labelIndex + 10).join(" ");
+      const nearbyMatch = nearbyText.match(
+        /\b(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}[./-]\d{1,2}[./-]\d{1,2})\b/u
+      );
 
-      if (nearbyMatch?.[0]) {
-        return nearbyMatch[0];
+      if (nearbyMatch?.[1]) {
+        return nearbyMatch[1];
       }
     }
 
-    const directMatch = fullText.match(
-      /(?:түсу күні|тусу күні|дата поступления|admission date)[^0-9]{0,100}(d{1,2}[./-]d{1,2}[./-]d{4})/i
-    );
+    const allDates = Array.from(
+      fullText.matchAll(
+        /\b(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}[./-]\d{1,2}[./-]\d{1,2})\b/gu
+      )
+    ).map((match) => match[1]);
 
-    if (directMatch?.[1]) {
-      return directMatch[1];
+    if (allDates.length === 1) {
+      return allDates[0] ?? null;
     }
 
-    return null;
+    // In Kazakhstan e-student cards, admission date is usually the last visible date.
+    return allDates.at(-1) ?? null;
   }
-
 
   private normalizeForCompare(value: string): string {
     return value
@@ -977,45 +1199,55 @@ export class StudentVerificationDocumentsController {
     }
 
     if (value instanceof Date) {
-      return this.formatDateAsDdMmYyyy(value);
+      return this.formatDateAsYyyyMmDd(value);
     }
 
     const trimmed = value.trim();
 
-    if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) {
-      return trimmed;
+    const ddMmYyyyMatch = trimmed.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+
+    if (ddMmYyyyMatch) {
+      const day = (ddMmYyyyMatch[1] ?? "").padStart(2, "0");
+      const month = (ddMmYyyyMatch[2] ?? "").padStart(2, "0");
+      const year = ddMmYyyyMatch[3] ?? "";
+
+      return `${year}-${month}-${day}`;
     }
 
-    const isoDateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const yyyyMmDdMatch = trimmed.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/);
 
-    if (isoDateOnlyMatch) {
-      return `${isoDateOnlyMatch[3]}.${isoDateOnlyMatch[2]}.${isoDateOnlyMatch[1]}`;
+    if (yyyyMmDdMatch) {
+      const year = yyyyMmDdMatch[1] ?? "";
+      const month = (yyyyMmDdMatch[2] ?? "").padStart(2, "0");
+      const day = (yyyyMmDdMatch[3] ?? "").padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
     }
 
     const isoDateTimeMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T/);
 
     if (isoDateTimeMatch) {
-      return `${isoDateTimeMatch[3]}.${isoDateTimeMatch[2]}.${isoDateTimeMatch[1]}`;
+      return `${isoDateTimeMatch[1]}-${isoDateTimeMatch[2]}-${isoDateTimeMatch[3]}`;
     }
 
     const parsed = new Date(trimmed);
 
     if (!Number.isNaN(parsed.getTime())) {
-      return this.formatDateAsDdMmYyyy(parsed);
+      return this.formatDateAsYyyyMmDd(parsed);
     }
 
     return trimmed;
   }
 
-  private formatDateAsDdMmYyyy(value: Date): string {
-    const day = String(value.getDate()).padStart(2, "0");
-    const month = String(value.getMonth() + 1).padStart(2, "0");
+  private formatDateAsYyyyMmDd(value: Date): string {
     const year = String(value.getFullYear());
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
 
-    return `${day}.${month}.${year}`;
+    return `${year}-${month}-${day}`;
   }
 
-  private profileDegreeMatchesDetectedDegree(
+private profileDegreeMatchesDetectedDegree(
     profileDegree: string | null,
     detectedDegree: string | null
   ): boolean {

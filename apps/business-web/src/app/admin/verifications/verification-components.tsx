@@ -239,7 +239,7 @@ function VerificationAnalysisPanel({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
-            Template-aware AI/OCR Assistant
+            Reference-aware PDF Assistant
           </p>
 
           <h3 className="mt-2 text-2xl font-black text-[#17384B]">
@@ -281,7 +281,7 @@ function VerificationAnalysisPanel({
           ["ФИО из PDF", analysis.extractedFields.fullName],
           ["Университет из PDF", analysis.extractedFields.university],
           ["Степень", analysis.extractedFields.degree],
-          ["Группа программ", analysis.extractedFields.programGroup],
+          ["Группа образовательных программ", analysis.extractedFields.programGroup],
           ["Курс", analysis.extractedFields.course],
           ["Дата поступления", analysis.extractedFields.admissionDate],
         ].map(([label, value]) => (
@@ -474,7 +474,7 @@ export function VerificationCard({
 
         <div className="rounded-2xl bg-[#F9FAF8] p-4">
           <p className="text-xs font-black uppercase tracking-[0.14em] text-[#94A3B8]">
-            Специальность
+            Группа образовательных программ
           </p>
 
           <p className="mt-1 font-bold text-[#17384B]">
