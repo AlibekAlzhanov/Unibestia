@@ -24,6 +24,23 @@ function nested(record: UnknownRecord | null, key: string): UnknownRecord | null
 
 export type DegreeValue = "bachelor" | "master" | "phd" | "other";
 
+export type UniversityOption = {
+  id: string;
+  name: string;
+  shortName: string | null;
+  city: string | null;
+  country?: string | null;
+};
+
+export type EducationProgramOption = {
+  id: string;
+  code: string;
+  nameRu: string;
+  nameKz: string;
+  nameEn: string | null;
+  degree: DegreeValue | string;
+};
+
 export function readUser(profile: unknown): UnknownRecord | null {
   return nested(asRecord(profile), "user");
 }
@@ -93,6 +110,36 @@ export function readSpecialty(profile: unknown): string {
   return readString(readStudentProfile(profile)?.specialty) ?? "";
 }
 
+export function readEducationProgramGroupId(profile: unknown): string {
+  return readString(readStudentProfile(profile)?.educationProgramGroupId) ?? "";
+}
+
+export function readEducationProgramGroup(profile: unknown): UnknownRecord | null {
+  return nested(readStudentProfile(profile), "educationProgramGroup");
+}
+
+export function readEducationProgramGroupLabel(profile: unknown): string {
+  const program = readEducationProgramGroup(profile);
+  const code = readString(program?.code);
+  const nameRu = readString(program?.nameRu);
+  const nameKz = readString(program?.nameKz);
+  const nameEn = readString(program?.nameEn);
+
+  if (code && nameRu) {
+    return `${code} — ${nameRu}`;
+  }
+
+  if (code && nameKz) {
+    return `${code} — ${nameKz}`;
+  }
+
+  if (code && nameEn) {
+    return `${code} — ${nameEn}`;
+  }
+
+  return readSpecialty(profile);
+}
+
 export function readCourse(profile: unknown): string {
   const course = readNumber(readStudentProfile(profile)?.course);
 
@@ -103,16 +150,64 @@ export function readAdmissionDate(profile: unknown): string {
   return readString(readStudentProfile(profile)?.admissionDate) ?? "";
 }
 
+export function readStudentUniversityId(profile: unknown): string {
+  return readString(readStudentProfile(profile)?.universityId) ?? "";
+}
+
+export function readDomainUniversity(profile: unknown): UniversityOption | null {
+  const university = nested(readDomainCheck(profile), "university");
+  const id = readString(university?.id);
+  const name = readString(university?.name);
+
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    shortName: readString(university?.shortName),
+    city: readString(university?.city),
+    country: readString(university?.country),
+  };
+}
+
+export function readStudentUniversity(profile: unknown): UniversityOption | null {
+  const university = nested(readStudentProfile(profile), "university");
+  const id = readString(university?.id);
+  const name = readString(university?.name);
+
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    shortName: readString(university?.shortName),
+    city: readString(university?.city),
+    country: readString(university?.country),
+  };
+}
+
+export function readResolvedUniversityId(profile: unknown): string {
+  return (
+    readStudentUniversityId(profile) ??
+    readDomainUniversity(profile)?.id ??
+    readStudentUniversity(profile)?.id ??
+    ""
+  );
+}
+
 export function readUniversityName(profile: unknown): string {
-  const domainCheck = readDomainCheck(profile);
-  const domainUniversity = nested(domainCheck, "university");
-  const studentUniversity = nested(readStudentProfile(profile), "university");
+  const domainUniversity = readDomainUniversity(profile);
+  const studentUniversity = readStudentUniversity(profile);
 
   return (
-    readString(domainUniversity?.shortName) ??
-    readString(domainUniversity?.name) ??
-    readString(studentUniversity?.shortName) ??
-    readString(studentUniversity?.name) ??
+    domainUniversity?.shortName ??
+    domainUniversity?.name ??
+    studentUniversity?.shortName ??
+    studentUniversity?.name ??
     "Не определен"
   );
 }

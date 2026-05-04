@@ -265,22 +265,37 @@ export default function ProfilePage(): JSX.Element {
   const { getToken } = useAuth();
 
   const profileQuery = useQuery(trpc.profile.getMyProfile.queryOptions());
-  const universitiesQuery = useQuery(
-    trpc.universities.listActive.queryOptions({ limit: 100 })
-  );
-  const programsQuery = useQuery(
-    trpc.educationPrograms.listActive.queryOptions({ limit: 100 })
-  );
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [universityId, setUniversityId] = useState("");
+  const [universitySearch, setUniversitySearch] = useState("");
   const [educationProgramGroupId, setEducationProgramGroupId] = useState("");
+  const [educationProgramSearch, setEducationProgramSearch] = useState("");
   const [degree, setDegree] = useState<Degree>("");
   const [course, setCourse] = useState("");
   const [admissionDate, setAdmissionDate] = useState("");
+
+  const universitiesQuery = useQuery({
+    ...trpc.universities.listActive.queryOptions({
+      search: universitySearch.trim() || undefined,
+      limit: 20,
+      offset: 0,
+    }),
+    staleTime: 60_000,
+  });
+  const programsQuery = useQuery({
+    ...trpc.educationPrograms.listActive.queryOptions({
+      degree: degree === "" ? undefined : (degree as never),
+      search: educationProgramSearch.trim() || undefined,
+      limit: 50,
+      offset: 0,
+    }),
+    enabled: degree !== "",
+    staleTime: 60_000,
+  });
   const [verificationDocument, setVerificationDocument] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
@@ -318,14 +333,29 @@ export default function ProfilePage(): JSX.Element {
     universitiesQuery.data?.items,
   ]);
 
-  const programs = useMemo(
-    () => (programsQuery.data?.items ?? []) as EducationProgramOption[],
-    [programsQuery.data?.items]
-  );
+  const programs = useMemo(() => {
+    const items = (programsQuery.data?.items ?? []) as EducationProgramOption[];
+    const fallbackItems = [studentProfile?.educationProgramGroup].filter(
+      (program): program is EducationProgramOption => Boolean(program?.id)
+    );
 
-  const filteredPrograms = useMemo(() => {
-    return programs.filter((program) => !degree || program.degree === degree);
-  }, [degree, programs]);
+    const byId = new Map<string, EducationProgramOption>();
+
+    for (const program of [...items, ...fallbackItems]) {
+      if (!degree || program.degree === degree) {
+        byId.set(program.id, program);
+      }
+    }
+
+    return Array.from(byId.values()).sort((left, right) =>
+      `${left.code} ${left.nameRu}`.localeCompare(`${right.code} ${right.nameRu}`)
+    );
+  }, [degree, programsQuery.data?.items, studentProfile?.educationProgramGroup]);
+
+  const selectedUniversity = useMemo(
+    () => universities.find((university) => university.id === universityId) ?? null,
+    [universities, universityId]
+  );
 
   const selectedProgram = useMemo(
     () => programs.find((program) => program.id === educationProgramGroupId) ?? null,
@@ -603,22 +633,22 @@ export default function ProfilePage(): JSX.Element {
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <label>
+              <div>
                 <span className="text-sm font-black text-[#17384B]">Университет *</span>
-                <select
-                  value={universityId}
-                  onChange={(event) => setUniversityId(event.target.value)}
-                  disabled={universitiesQuery.isLoading}
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-                >
-                  <option value="">Выберите университет</option>
-                  {universities.map((university) => (
-                    <option key={university.id} value={university.id}>
-                      {university.shortName || university.name}
-                      {university.city ? ` — ${university.city}` : ""}
-                    </option>
-                  ))}
-                </select>
+
+                <input
+                  value={universitySearch}
+                  onChange={(event) => setUniversitySearch(event.target.value)}
+                  placeholder="Поиск университета: Satbayev, AITU..."
+                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
+                />
+
+                {selectedUniversity && (
+                  <div className="mt-2 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-xs font-bold text-green-700">
+                    Выбрано: {selectedUniversity.shortName || selectedUniversity.name}
+                    {selectedUniversity.city ? ` — ${selectedUniversity.city}` : ""}
+                  </div>
+                )}
 
                 {universitiesQuery.error && (
                   <p className="mt-2 text-xs font-bold text-red-600">
@@ -628,10 +658,52 @@ export default function ProfilePage(): JSX.Element {
 
                 {!universitiesQuery.isLoading && universities.length === 0 && (
                   <p className="mt-2 text-xs font-bold text-red-600">
-                    Активных университетов пока нет. Добавьте их в админ-панели.
+                    Активных университетов пока нет или поиск ничего не нашёл.
                   </p>
                 )}
-              </label>
+
+                <div className="mt-3 grid max-h-[260px] gap-2 overflow-y-auto rounded-2xl border border-[#E5ECE9] bg-white p-2">
+                  {universitiesQuery.isLoading && universities.length === 0 ? (
+                    <div className="rounded-xl bg-[#F9FAF8] px-4 py-3 text-sm font-bold text-[#526470]">
+                      Ищем университеты...
+                    </div>
+                  ) : (
+                    universities.map((university) => {
+                      const selected = university.id === universityId;
+
+                      return (
+                        <button
+                          key={university.id}
+                          type="button"
+                          onClick={() => {
+                            setUniversityId(university.id);
+                            setUniversitySearch(university.shortName || university.name);
+                          }}
+                          className={[
+                            "rounded-xl border px-4 py-3 text-left transition",
+                            selected
+                              ? "border-[#17384B] bg-[#17384B] text-white"
+                              : "border-[#E5ECE9] bg-[#F9FAF8] text-[#17384B] hover:border-[#FFB5A4] hover:bg-white",
+                          ].join(" ")}
+                        >
+                          <span className="block text-sm font-black">
+                            {university.shortName || university.name}
+                            {university.city ? ` — ${university.city}` : ""}
+                          </span>
+                          <span
+                            className={[
+                              "mt-1 block text-xs",
+                              selected ? "text-white/78" : "text-[#6B7280]",
+                            ].join(" ")}
+                          >
+                            {university.name}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
 
               <label>
                 <span className="text-sm font-black text-[#17384B]">Степень обучения *</span>
@@ -640,6 +712,7 @@ export default function ProfilePage(): JSX.Element {
                   onChange={(event) => {
                     setDegree(event.target.value as Degree);
                     setEducationProgramGroupId("");
+                    setEducationProgramSearch("");
                   }}
                   className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
                 >
@@ -651,28 +724,82 @@ export default function ProfilePage(): JSX.Element {
                 </select>
               </label>
 
-              <label className="md:col-span-2">
+              <div className="md:col-span-2">
                 <span className="text-sm font-black text-[#17384B]">
                   Группа образовательных программ *
                 </span>
-                <select
-                  value={educationProgramGroupId}
-                  onChange={(event) => setEducationProgramGroupId(event.target.value)}
-                  disabled={programsQuery.isLoading}
-                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-                >
-                  <option value="">Выберите группу образовательных программ</option>
-                  {filteredPrograms.map((program) => (
-                    <option key={program.id} value={program.id}>
-                      {program.code} — {program.nameRu}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-xs leading-5 text-[#6B7280]">
-                  Если списка нет, попросите администратора добавить программу в разделе
-                  “Образовательные программы”.
-                </p>
-              </label>
+
+                <input
+                  value={educationProgramSearch}
+                  onChange={(event) => setEducationProgramSearch(event.target.value)}
+                  disabled={!degree}
+                  placeholder={degree ? "Поиск: B057, Информационные технологии..." : "Сначала выберите степень"}
+                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition placeholder:text-[#9CA3AF] disabled:cursor-not-allowed disabled:opacity-60 focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
+                />
+
+                {selectedProgram && (
+                  <div className="mt-2 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-xs font-bold text-green-700">
+                    Выбрано: {selectedProgram.code} — {selectedProgram.nameRu}
+                  </div>
+                )}
+
+                {!degree ? (
+                  <p className="mt-2 text-xs leading-5 text-[#6B7280]">
+                    Сначала выберите степень обучения, затем найдите группу образовательных программ.
+                  </p>
+                ) : programsQuery.error ? (
+                  <p className="mt-2 text-xs font-bold text-red-600">
+                    Не удалось загрузить программы: {programsQuery.error.message}
+                  </p>
+                ) : null}
+
+                {degree && (
+                  <div className="mt-3 grid max-h-[300px] gap-2 overflow-y-auto rounded-2xl border border-[#E5ECE9] bg-white p-2">
+                    {programsQuery.isLoading && programs.length === 0 ? (
+                      <div className="rounded-xl bg-[#F9FAF8] px-4 py-3 text-sm font-bold text-[#526470]">
+                        Ищем программы...
+                      </div>
+                    ) : programs.length === 0 ? (
+                      <div className="rounded-xl bg-[#F9FAF8] px-4 py-3 text-sm font-bold text-[#526470]">
+                        Поиск ничего не нашёл. Попросите администратора добавить программу.
+                      </div>
+                    ) : (
+                      programs.map((program) => {
+                        const selected = program.id === educationProgramGroupId;
+
+                        return (
+                          <button
+                            key={program.id}
+                            type="button"
+                            onClick={() => {
+                              setEducationProgramGroupId(program.id);
+                              setEducationProgramSearch(`${program.code} ${program.nameRu}`);
+                            }}
+                            className={[
+                              "rounded-xl border px-4 py-3 text-left transition",
+                              selected
+                                ? "border-[#17384B] bg-[#17384B] text-white"
+                                : "border-[#E5ECE9] bg-[#F9FAF8] text-[#17384B] hover:border-[#FFB5A4] hover:bg-white",
+                            ].join(" ")}
+                          >
+                            <span className="block text-sm font-black">
+                              {program.code} — {program.nameRu}
+                            </span>
+                            <span
+                              className={[
+                                "mt-1 block text-xs",
+                                selected ? "text-white/78" : "text-[#6B7280]",
+                              ].join(" ")}
+                            >
+                              {program.nameKz || program.nameEn || degreeLabel(program.degree)}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
 
               <label>
                 <span className="text-sm font-black text-[#17384B]">Курс *</span>
