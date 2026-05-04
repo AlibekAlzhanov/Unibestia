@@ -7,7 +7,6 @@ import {
   OneToMany,
 } from "typeorm";
 import { UniversityEmailDomain } from "./university-email-domain.entity.js";
-import { EducationProgramGroup } from "../education/education-program-group.entity.js";
 import { StudentProfile } from "../student/student-profile.entity.js";
 
 export enum UniversityStatus {
@@ -66,12 +65,6 @@ export class University {
     (universityEmailDomain) => universityEmailDomain.university
   )
   emailDomains: UniversityEmailDomain[];
-
-  @OneToMany(
-    () => EducationProgramGroup,
-    (educationProgramGroup) => educationProgramGroup.university
-  )
-  educationProgramGroups: EducationProgramGroup[];
 
   @OneToMany(() => StudentProfile, (studentProfile) => studentProfile.university)
   studentProfiles: StudentProfile[];

@@ -5,8 +5,6 @@ import { ILike, Repository } from "typeorm";
 import {
   EducationDegree,
   EducationProgramGroup,
-  Role,
-  University,
   User,
   UserRole,
 } from "@repo/db";
@@ -33,7 +31,6 @@ const normalizeNullableText = (value: string | null | undefined): string | null 
 const educationDegreeSchema = z.nativeEnum(EducationDegree);
 
 const educationProgramPayloadSchema = z.object({
-  universityId: z.string().uuid(),
   code: z.string().trim().min(1).max(20),
   nameRu: z.string().trim().min(2).max(255),
   nameKz: z.string().trim().min(2).max(255),
@@ -46,19 +43,24 @@ const educationProgramUpdateSchema = educationProgramPayloadSchema
   .partial()
   .extend({ id: z.string().uuid() });
 
+const educationProgramsListSchema = z
+  .object({
+    degree: educationDegreeSchema.optional(),
+    search: z.string().trim().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(200).default(100),
+    offset: z.number().int().min(0).default(0),
+  })
+  .optional();
+
 @Injectable()
 export class EducationProgramsRouter {
   constructor(
     @InjectRepository(EducationProgramGroup)
     private readonly educationProgramGroupsRepo: Repository<EducationProgramGroup>,
-    @InjectRepository(University)
-    private readonly universitiesRepo: Repository<University>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     @InjectRepository(UserRole)
-    private readonly userRolesRepo: Repository<UserRole>,
-    @InjectRepository(Role)
-    private readonly rolesRepo: Repository<Role>
+    private readonly userRolesRepo: Repository<UserRole>
   ) {}
 
   private async getOrCreateCurrentUser(ctx: AuthContextLike): Promise<User> {
@@ -139,7 +141,6 @@ export class EducationProgramsRouter {
   private mapProgram(program: EducationProgramGroup) {
     return {
       id: program.id,
-      universityId: program.universityId,
       code: program.code,
       nameRu: program.nameRu,
       nameKz: program.nameKz,
@@ -148,99 +149,97 @@ export class EducationProgramsRouter {
       isActive: program.isActive,
       createdAt: program.createdAt,
       updatedAt: program.updatedAt,
-      university: program.university
-        ? {
-            id: program.university.id,
-            name: program.university.name,
-            shortName: program.university.shortName,
-            city: program.university.city,
-            status: program.university.status,
-          }
-        : null,
     };
   }
 
-  private async assertUniversityExists(universityId: string): Promise<University> {
-    const university = await this.universitiesRepo.findOne({
-      where: { id: universityId },
-    });
-
-    if (!university) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "University not found",
-      });
-    }
-
-    return university;
-  }
-
   private async assertProgramCodeIsUnique(input: {
-    universityId: string;
     code: string;
+    degree: EducationDegree;
     exceptId?: string;
   }): Promise<void> {
     const existing = await this.educationProgramGroupsRepo.findOne({
       where: {
-        universityId: input.universityId,
         code: input.code.trim().toUpperCase(),
+        degree: input.degree,
       },
     });
 
     if (existing && existing.id !== input.exceptId) {
       throw new TRPCError({
         code: "CONFLICT",
-        message: "Education program group with this code already exists for selected university",
+        message:
+          "Education program group with this code already exists for selected degree",
       });
     }
   }
 
+  private async listActivePrograms(input: {
+    degree?: EducationDegree;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const baseWhere = {
+      isActive: true,
+      ...(input.degree ? { degree: input.degree } : {}),
+    };
+
+    const where = input.search
+      ? [
+          { ...baseWhere, code: ILike(`%${input.search}%`) },
+          { ...baseWhere, nameRu: ILike(`%${input.search}%`) },
+          { ...baseWhere, nameKz: ILike(`%${input.search}%`) },
+          { ...baseWhere, nameEn: ILike(`%${input.search}%`) },
+        ]
+      : baseWhere;
+
+    const [items, total] = await this.educationProgramGroupsRepo.findAndCount({
+      where,
+      order: { code: "ASC", nameRu: "ASC" },
+      take: input.limit ?? 100,
+      skip: input.offset ?? 0,
+    });
+
+    return {
+      total,
+      limit: input.limit ?? 100,
+      offset: input.offset ?? 0,
+      items: items.map((program) => ({
+        id: program.id,
+        code: program.code,
+        nameRu: program.nameRu,
+        nameKz: program.nameKz,
+        nameEn: program.nameEn,
+        degree: program.degree,
+      })),
+    };
+  }
+
   public readonly router = t.router({
+    listActive: procedure.input(educationProgramsListSchema).query(({ input }) => {
+      return this.listActivePrograms(input ?? {});
+    }),
+
+    // Kept for backward compatibility with early student profile UI drafts.
+    // Education program groups are now global, so universityId is ignored.
     listByUniversity: procedure
       .input(
         z.object({
-          universityId: z.string().uuid(),
+          universityId: z.string().uuid().optional(),
           degree: educationDegreeSchema.optional(),
           search: z.string().trim().min(1).max(100).optional(),
+          limit: z.number().int().min(1).max(200).default(100),
+          offset: z.number().int().min(0).default(0),
         })
       )
-      .query(async ({ input }) => {
-        const baseWhere = {
-          universityId: input.universityId,
-          isActive: true,
-          ...(input.degree ? { degree: input.degree } : {}),
-        };
-
-        const where = input.search
-          ? [
-              { ...baseWhere, code: ILike(`%${input.search}%`) },
-              { ...baseWhere, nameRu: ILike(`%${input.search}%`) },
-              { ...baseWhere, nameKz: ILike(`%${input.search}%`) },
-              { ...baseWhere, nameEn: ILike(`%${input.search}%`) },
-            ]
-          : baseWhere;
-
-        const items = await this.educationProgramGroupsRepo.find({
-          where,
-          order: { code: "ASC", nameRu: "ASC" },
-        });
-
-        return items.map((program) => ({
-          id: program.id,
-          universityId: program.universityId,
-          code: program.code,
-          nameRu: program.nameRu,
-          nameKz: program.nameKz,
-          nameEn: program.nameEn,
-          degree: program.degree,
-        }));
+      .query(({ input }) => {
+        return this.listActivePrograms(input);
       }),
 
     adminList: protectedProcedure
       .input(
         z
           .object({
-            universityId: z.string().uuid().optional(),
             degree: educationDegreeSchema.optional(),
             isActive: z.boolean().optional(),
             search: z.string().trim().min(1).max(100).optional(),
@@ -253,7 +252,6 @@ export class EducationProgramsRouter {
         await this.requireAdminUser(ctx);
 
         const baseWhere = {
-          ...(input?.universityId ? { universityId: input.universityId } : {}),
           ...(input?.degree ? { degree: input.degree } : {}),
           ...(typeof input?.isActive === "boolean" ? { isActive: input.isActive } : {}),
         };
@@ -269,7 +267,6 @@ export class EducationProgramsRouter {
 
         const [items, total] = await this.educationProgramGroupsRepo.findAndCount({
           where,
-          relations: { university: true },
           order: { code: "ASC", nameRu: "ASC" },
           take: input?.limit ?? 50,
           skip: input?.offset ?? 0,
@@ -290,7 +287,6 @@ export class EducationProgramsRouter {
 
         const program = await this.educationProgramGroupsRepo.findOne({
           where: { id: input.id },
-          relations: { university: true },
         });
 
         if (!program) {
@@ -307,14 +303,12 @@ export class EducationProgramsRouter {
       .input(educationProgramPayloadSchema)
       .mutation(async ({ ctx, input }) => {
         await this.requireAdminUser(ctx);
-        await this.assertUniversityExists(input.universityId);
         await this.assertProgramCodeIsUnique({
-          universityId: input.universityId,
           code: input.code,
+          degree: input.degree,
         });
 
         const program = this.educationProgramGroupsRepo.create({
-          universityId: input.universityId,
           code: input.code.trim().toUpperCase(),
           nameRu: input.nameRu.trim(),
           nameKz: input.nameKz.trim(),
@@ -324,12 +318,7 @@ export class EducationProgramsRouter {
         });
 
         const saved = await this.educationProgramGroupsRepo.save(program);
-        const reloaded = await this.educationProgramGroupsRepo.findOneOrFail({
-          where: { id: saved.id },
-          relations: { university: true },
-        });
-
-        return this.mapProgram(reloaded);
+        return this.mapProgram(saved);
       }),
 
     adminUpdate: protectedProcedure
@@ -339,7 +328,6 @@ export class EducationProgramsRouter {
 
         const program = await this.educationProgramGroupsRepo.findOne({
           where: { id: input.id },
-          relations: { university: true },
         });
 
         if (!program) {
@@ -349,23 +337,19 @@ export class EducationProgramsRouter {
           });
         }
 
-        const nextUniversityId = input.universityId ?? program.universityId;
         const nextCode = input.code?.trim().toUpperCase() ?? program.code;
+        const nextDegree = input.degree ?? program.degree;
 
-        if (input.universityId) {
-          await this.assertUniversityExists(input.universityId);
-        }
-
-        if (nextUniversityId !== program.universityId || nextCode !== program.code) {
+        if (nextCode !== program.code || nextDegree !== program.degree) {
           await this.assertProgramCodeIsUnique({
-            universityId: nextUniversityId,
             code: nextCode,
+            degree: nextDegree,
             exceptId: program.id,
           });
         }
 
-        program.universityId = nextUniversityId;
         program.code = nextCode;
+        program.degree = nextDegree;
 
         if (input.nameRu) {
           program.nameRu = input.nameRu.trim();
@@ -376,20 +360,12 @@ export class EducationProgramsRouter {
         if ("nameEn" in input) {
           program.nameEn = normalizeNullableText(input.nameEn);
         }
-        if (input.degree) {
-          program.degree = input.degree;
-        }
         if (typeof input.isActive === "boolean") {
           program.isActive = input.isActive;
         }
 
         const saved = await this.educationProgramGroupsRepo.save(program);
-        const reloaded = await this.educationProgramGroupsRepo.findOneOrFail({
-          where: { id: saved.id },
-          relations: { university: true },
-        });
-
-        return this.mapProgram(reloaded);
+        return this.mapProgram(saved);
       }),
 
     adminDeactivate: protectedProcedure
@@ -399,7 +375,6 @@ export class EducationProgramsRouter {
 
         const program = await this.educationProgramGroupsRepo.findOne({
           where: { id: input.id },
-          relations: { university: true },
         });
 
         if (!program) {
