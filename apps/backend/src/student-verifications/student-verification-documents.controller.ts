@@ -19,6 +19,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { InjectRepository } from "@nestjs/typeorm";
 import { clerkClient } from "@clerk/express";
 import {
+  EducationProgramGroup,
   StudentProfile,
   StudentVerification,
   StudentVerificationMethod,
@@ -260,6 +261,7 @@ export class StudentVerificationDocumentsController {
         user: true,
         studentProfile: {
           university: true,
+          educationProgramGroup: true,
         },
       },
     });
@@ -355,14 +357,11 @@ export class StudentVerificationDocumentsController {
       score: 15,
     });
 
-    const profileNameParts = [user?.lastName, user?.firstName]
-      .filter((value): value is string => Boolean(value?.trim()))
-      .map((value) => this.normalizeForCompare(value));
-
-    const normalizedFullName = this.normalizeForCompare(fields.fullName ?? "");
-    const profileNameMatches =
-      profileNameParts.length > 0 &&
-      profileNameParts.every((part) => normalizedFullName.includes(part));
+    const profileNameMatches = this.profileNameMatchesDetectedName({
+      firstName: user?.firstName ?? null,
+      lastName: user?.lastName ?? null,
+      detectedFullName: fields.fullName,
+    });
 
     addCheck({
       code: "full_name_matches_profile",
@@ -390,24 +389,11 @@ export class StudentVerificationDocumentsController {
       score: 15,
     });
 
-    const profileUniversityName =
-      studentProfile?.university?.name ??
-      studentProfile?.university?.shortName ??
-      null;
-
-    const normalizedDetectedUniversity = this.normalizeForCompare(
-      fields.university ?? ""
+    const universityMatches = this.universityMatchesProfile(
+      input.extractedText,
+      fields.university,
+      studentProfile?.university ?? null
     );
-    const normalizedProfileUniversity = this.normalizeForCompare(
-      profileUniversityName ?? ""
-    );
-
-    const universityMatches =
-      Boolean(fields.university && profileUniversityName) &&
-      (normalizedDetectedUniversity.includes(normalizedProfileUniversity) ||
-        normalizedProfileUniversity.includes(normalizedDetectedUniversity) ||
-        normalizedDetectedUniversity.includes("сатпаев") ||
-        normalizedDetectedUniversity.includes("satbayev"));
 
     addCheck({
       code: "university_matches_profile",
@@ -464,6 +450,28 @@ export class StudentVerificationDocumentsController {
         ? `Detected program group: ${fields.programGroup}`
         : "Program group was not detected.",
       score: 5,
+    });
+
+    const programGroupMatches = this.programGroupMatchesProfile(
+      input.extractedText,
+      fields.programGroup,
+      studentProfile?.educationProgramGroup ?? null
+    );
+
+    addCheck({
+      code: "program_group_matches_profile",
+      label: "Program group matches profile",
+      status: !fields.programGroup
+        ? "warning"
+        : programGroupMatches
+          ? "pass"
+          : "warning",
+      message: !fields.programGroup
+        ? "Cannot compare program group because it was not detected."
+        : programGroupMatches
+          ? "Detected program group matches selected education program group."
+          : "Detected program group differs from selected profile program group. Manual review is recommended.",
+      score: 10,
     });
 
     const profileCourse = studentProfile?.course
@@ -609,7 +617,7 @@ export class StudentVerificationDocumentsController {
       normalizedText.includes("курс обучения");
 
     const degree = this.extractDegree(lines, fullText);
-    const dateMatch = fullText.match(/\b\d{2}\.\d{2}\.\d{4}\b/);
+    const admissionDate = this.extractAdmissionDate(lines, fullText);
     const programLine =
       lines.find((line) => /\b[A-ZА-Я]\d{3}\b/u.test(line)) ?? null;
 
@@ -623,7 +631,7 @@ export class StudentVerificationDocumentsController {
       degree,
       programGroup: programLine,
       course,
-      admissionDate: dateMatch?.[0] ?? null,
+      admissionDate,
       hasStudentCardTitle,
       rawTextPreview: rawText.replace(/\s+/g, " ").trim().slice(0, 2500),
     };
@@ -752,6 +760,187 @@ export class StudentVerificationDocumentsController {
 
     return null;
   }
+
+  private profileNameMatchesDetectedName(input: {
+    firstName: string | null;
+    lastName: string | null;
+    detectedFullName: string | null;
+  }): boolean {
+    if (!input.firstName || !input.lastName || !input.detectedFullName) {
+      return false;
+    }
+
+    const documentTokens = input.detectedFullName
+      .split(/s+/)
+      .flatMap((token) => this.tokenVariants(token));
+
+    const requiredTokens = [input.lastName, input.firstName].flatMap((token) =>
+      this.tokenVariants(token)
+    );
+
+    return requiredTokens.every((requiredToken) =>
+      documentTokens.some(
+        (documentToken) =>
+          documentToken === requiredToken ||
+          documentToken.includes(requiredToken) ||
+          requiredToken.includes(documentToken)
+      )
+    );
+  }
+
+  private tokenVariants(value: string): string[] {
+    const normalized = this.normalizeForCompare(value).replace(/s+/g, "");
+    const latin = this.normalizeForCompare(this.cyrillicToLatin(value)).replace(
+      /s+/g,
+      ""
+    );
+
+    return [...new Set([normalized, latin].filter(Boolean))];
+  }
+
+  private cyrillicToLatin(value: string): string {
+    const map: Record<string, string> = {
+      а: "a",
+      б: "b",
+      в: "v",
+      г: "g",
+      д: "d",
+      е: "e",
+      ё: "e",
+      ж: "zh",
+      з: "z",
+      и: "i",
+      й: "i",
+      к: "k",
+      л: "l",
+      м: "m",
+      н: "n",
+      о: "o",
+      п: "p",
+      р: "r",
+      с: "s",
+      т: "t",
+      у: "u",
+      ф: "f",
+      х: "h",
+      ц: "ts",
+      ч: "ch",
+      ш: "sh",
+      щ: "sh",
+      ы: "y",
+      э: "e",
+      ю: "yu",
+      я: "ya",
+      ә: "a",
+      і: "i",
+      ң: "n",
+      ғ: "g",
+      ү: "u",
+      ұ: "u",
+      қ: "k",
+      ө: "o",
+      һ: "h",
+      ь: "",
+      ъ: "",
+    };
+
+    return value
+      .toLowerCase()
+      .split("")
+      .map((char) => map[char] ?? char)
+      .join("");
+  }
+
+  private universityMatchesProfile(
+    fullDocumentText: string,
+    detectedUniversity: string | null,
+    university: University | null
+  ): boolean {
+    if (!university) {
+      return false;
+    }
+
+    const documentText = this.normalizeForCompare(
+      [fullDocumentText, detectedUniversity].filter(Boolean).join(" ")
+    );
+
+    const candidates = [
+      university.name,
+      university.shortName,
+      university.officialNameRu,
+      university.officialNameKz,
+      university.officialNameEn,
+      ...(university.documentKeywords ?? []),
+    ]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map((value) => this.normalizeForCompare(value))
+      .filter((value) => value.length >= 3);
+
+    return candidates.some(
+      (candidate) =>
+        documentText.includes(candidate) || candidate.includes(documentText)
+    );
+  }
+
+  private programGroupMatchesProfile(
+    fullDocumentText: string,
+    detectedProgramGroup: string | null,
+    program: EducationProgramGroup | null
+  ): boolean {
+    if (!program) {
+      return false;
+    }
+
+    const documentText = this.normalizeForCompare(
+      [fullDocumentText, detectedProgramGroup].filter(Boolean).join(" ")
+    );
+
+    const code = this.normalizeForCompare(program.code);
+    const names = [program.nameRu, program.nameKz, program.nameEn]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map((value) => this.normalizeForCompare(value));
+
+    return (
+      documentText.includes(code) ||
+      names.some((name) => documentText.includes(name))
+    );
+  }
+
+  private extractAdmissionDate(lines: string[], fullText: string): string | null {
+    const dateRegex = /d{1,2}[./-]d{1,2}[./-]d{4}/;
+
+    const labelIndex = lines.findIndex((line) => {
+      const normalized = this.normalizeForCompare(line);
+
+      return (
+        normalized.includes("түсу күні") ||
+        normalized.includes("тусу күні") ||
+        normalized.includes("түсу куні") ||
+        normalized.includes("дата поступления") ||
+        normalized.includes("admission date")
+      );
+    });
+
+    if (labelIndex >= 0) {
+      const nearbyText = lines.slice(labelIndex, labelIndex + 6).join(" ");
+      const nearbyMatch = nearbyText.match(dateRegex);
+
+      if (nearbyMatch?.[0]) {
+        return nearbyMatch[0];
+      }
+    }
+
+    const directMatch = fullText.match(
+      /(?:түсу күні|тусу күні|дата поступления|admission date)[^0-9]{0,100}(d{1,2}[./-]d{1,2}[./-]d{4})/i
+    );
+
+    if (directMatch?.[1]) {
+      return directMatch[1];
+    }
+
+    return null;
+  }
+
 
   private normalizeForCompare(value: string): string {
     return value
@@ -989,7 +1178,7 @@ export class StudentVerificationDocumentsController {
     }
     if (!university.id) missingFields.push("Университет");
     if (!studentProfile.degree?.trim()) missingFields.push("Степень обучения");
-    if (!studentProfile.specialty?.trim()) missingFields.push("Специальность");
+    if (!studentProfile.educationProgramGroupId) missingFields.push("Группа образовательных программ");
     if (!studentProfile.course) missingFields.push("Курс");
     if (!studentProfile.admissionDate) missingFields.push("Дата поступления");
 
