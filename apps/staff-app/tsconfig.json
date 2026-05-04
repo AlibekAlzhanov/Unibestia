@@ -1,0 +1,16 @@
+{
+  "extends": "@repo/typescript-config/react-library",
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "types": ["react", "node"],
+    "typeRoots": ["./node_modules/@types"],
+    "paths": {
+      "@/*": ["./*"],
+      "@repo/trpc/*": ["../../packages/trpc/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "app.config.ts"]
+}

@@ -32,19 +32,41 @@ function parseCorsOrigins(value: string | undefined): string[] {
 function getLocalIpAddress(): string {
   const networkInterfaces = os.networkInterfaces();
 
-  for (const interfaces of Object.values(networkInterfaces)) {
+  const candidates: string[] = [];
+
+  for (const [name, interfaces] of Object.entries(networkInterfaces)) {
     if (!interfaces) {
+      continue;
+    }
+
+    const normalizedName = name.toLowerCase();
+
+    const isVirtualAdapter =
+      normalizedName.includes("wsl") ||
+      normalizedName.includes("hyper-v") ||
+      normalizedName.includes("virtual") ||
+      normalizedName.includes("vmware") ||
+      normalizedName.includes("virtualbox") ||
+      normalizedName.includes("docker") ||
+      normalizedName.includes("vethernet");
+
+    if (isVirtualAdapter) {
       continue;
     }
 
     for (const item of interfaces) {
       if (item.family === "IPv4" && !item.internal) {
-        return item.address;
+        candidates.push(item.address);
       }
     }
   }
 
-  return "localhost";
+  const preferredPrivateIp =
+    candidates.find((ip) => ip.startsWith("192.168.")) ??
+    candidates.find((ip) => ip.startsWith("10.")) ??
+    candidates.find((ip) => ip.startsWith("172."));
+
+  return preferredPrivateIp ?? candidates[0] ?? "localhost";
 }
 
 async function bootstrap() {

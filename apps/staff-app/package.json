@@ -1,0 +1,51 @@
+{
+  "name": "@repo/staff-app",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "expo start",
+    "dev": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build": "expo export --platform all",
+    "lint": "expo lint",
+    "type-check": "tsc --noEmit",
+    "fullclean": "rm -rf node_modules && rm -rf .turbo && rm -rf .expo"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.27.0",
+    "@clerk/clerk-expo": "2.10.1",
+    "@expo/vector-icons": "^15.1.1",
+    "@react-navigation/native": "^7.2.2",
+    "@react-navigation/native-stack": "^7.14.12",
+    "@repo/trpc": "workspace:*",
+    "@tanstack/react-query": "^5.74.4",
+    "@trpc/client": "^11.1.1",
+    "@trpc/react-query": "^11.1.1",
+    "@trpc/server": "^11.1.1",
+    "@trpc/tanstack-react-query": "^11.1.1",
+    "expo": "~55.0.19",
+    "expo-camera": "~55.0.16",
+    "expo-secure-store": "^55.0.13",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.0",
+    "react-native-web": "0.21.0",
+    "react-native-gesture-handler": "~2.30.1",
+    "react-native-safe-area-context": "^5.6.2",
+    "react-native-screens": "~4.23.0",
+    "superjson": "^2.2.2",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.10",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.15.2",
+    "@types/react": "19.2.14",
+    "typescript": "5.8.3"
+  }
+}

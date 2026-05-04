@@ -11,7 +11,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: "portrait",
   userInterfaceStyle: "light",
   scheme: "unibestia",
-  newArchEnabled: true,
   ios: {
     ...config.ios,
     supportsTablet: true,
