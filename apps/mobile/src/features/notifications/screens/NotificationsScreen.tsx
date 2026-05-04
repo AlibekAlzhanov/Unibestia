@@ -14,6 +14,7 @@ import { radius } from "../../../shared/theme/radius";
 import { spacing } from "../../../shared/theme/spacing";
 import { AppButton } from "../../../shared/ui/AppButton";
 import { AppText } from "../../../shared/ui/AppText";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { Screen } from "../../../shared/ui/Screen";
 import { ScreenHeader } from "../../../shared/ui/ScreenHeader";
 import { StateView } from "../../../shared/ui/StateView";
@@ -119,12 +120,10 @@ export function NotificationsScreen({ navigation }: Props) {
       {notificationsQuery.isLoading ? (
         <StateView title="Загружаем уведомления" loading />
       ) : notificationsQuery.error ? (
-        <StateView
-          title="Не удалось загрузить уведомления"
-          description={notificationsQuery.error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={() => notificationsQuery.refetch()}
+        <ErrorStateView
+          error={notificationsQuery.error}
+          fallbackTitle="Не удалось загрузить уведомления"
+          onRetry={() => notificationsQuery.refetch()}
         />
       ) : notifications.length ? (
         <View style={styles.list}>
@@ -139,8 +138,14 @@ export function NotificationsScreen({ navigation }: Props) {
       ) : (
         <StateView
           title={unreadOnly ? "Непрочитанных нет" : "Уведомлений пока нет"}
-          description="Здесь появятся сообщения о бонусах, QR, рефералах и статусе проверки."
-          icon="notifications-off-outline"
+          description={
+            unreadOnly
+              ? "Все уведомления прочитаны. Переключись на “Все”, чтобы посмотреть историю."
+              : "Здесь появятся сообщения о бонусах, QR, рефералах и статусе проверки."
+          }
+          icon={unreadOnly ? "checkmark-done-outline" : "notifications-off-outline"}
+          actionLabel={unreadOnly ? "Показать все" : undefined}
+          onAction={unreadOnly ? () => setUnreadOnly(false) : undefined}
         />
       )}
     </Screen>

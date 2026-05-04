@@ -7,6 +7,7 @@ import { OfferCard } from "../../../entities/offer/ui/OfferCard";
 import { useRefresh } from "../../../shared/hooks/useRefresh";
 import { spacing } from "../../../shared/theme/spacing";
 import { AppButton } from "../../../shared/ui/AppButton";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { Screen } from "../../../shared/ui/Screen";
 import { ScreenHeader } from "../../../shared/ui/ScreenHeader";
 import { StateView } from "../../../shared/ui/StateView";
@@ -68,12 +69,10 @@ export function FavoritesScreen({ navigation }: Props) {
       {isLoading ? (
         <StateView title="Загружаем избранное" loading />
       ) : error ? (
-        <StateView
-          title="Не удалось загрузить избранное"
-          description={error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={refresh.onRefresh}
+        <ErrorStateView
+          error={error}
+          fallbackTitle="Не удалось загрузить избранное"
+          onRetry={refresh.onRefresh}
         />
       ) : favoriteOffers.length ? (
         <View style={styles.list}>
@@ -93,7 +92,7 @@ export function FavoritesScreen({ navigation }: Props) {
       ) : (
         <StateView
           title="Избранных скидок пока нет"
-          description="Нажимай на сердечко в каталоге или на главной, чтобы сохранить скидку здесь."
+          description="Сохраняй предложения через сердечко на главной или в каталоге — они появятся здесь."
           icon="heart-outline"
           actionLabel="Открыть каталог"
           onAction={() =>

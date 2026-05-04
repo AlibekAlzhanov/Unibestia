@@ -13,6 +13,7 @@ import { useDebouncedValue } from "../../../shared/hooks/useDebouncedValue";
 import { useRefresh } from "../../../shared/hooks/useRefresh";
 import { spacing } from "../../../shared/theme/spacing";
 import { AppInput } from "../../../shared/ui/AppInput";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { Screen } from "../../../shared/ui/Screen";
 import { StateView } from "../../../shared/ui/StateView";
 import { ScreenHeader } from "../../../shared/ui/ScreenHeader";
@@ -48,6 +49,8 @@ export function CatalogScreen({ navigation }: Props) {
   const favoriteIds = favoriteOfferIdsQuery.data ?? [];
   const categories = readCategoryItems(categoriesQuery.data);
 
+  const hasActiveFilters = Boolean(debouncedSearch.trim() || selectedCategorySlug);
+
   const refreshHandler = useCallback(async () => {
     await Promise.all([
       categoriesQuery.refetch(),
@@ -60,6 +63,11 @@ export function CatalogScreen({ navigation }: Props) {
 
   async function handleToggleFavorite(offerId: string) {
     await toggleFavoriteMutation.mutateAsync({ offerId });
+  }
+
+  function resetFilters() {
+    setSearch("");
+    setSelectedCategorySlug(null);
   }
 
   return (
@@ -96,12 +104,10 @@ export function CatalogScreen({ navigation }: Props) {
       {offersQuery.isLoading ? (
         <StateView title="Загружаем каталог" loading />
       ) : offersQuery.error ? (
-        <StateView
-          title="Не удалось загрузить каталог"
-          description={offersQuery.error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={() => offersQuery.refetch()}
+        <ErrorStateView
+          error={offersQuery.error}
+          fallbackTitle="Не удалось загрузить каталог"
+          onRetry={() => offersQuery.refetch()}
         />
       ) : offers.length ? (
         <View style={styles.list}>
@@ -120,9 +126,15 @@ export function CatalogScreen({ navigation }: Props) {
         </View>
       ) : (
         <StateView
-          title="Ничего не найдено"
-          description="Попробуй изменить поисковый запрос или категорию."
-          icon="search-outline"
+          title={hasActiveFilters ? "Ничего не найдено" : "Каталог пока пуст"}
+          description={
+            hasActiveFilters
+              ? "Попробуй изменить поисковый запрос или сбросить выбранную категорию."
+              : "Здесь появятся скидки после публикации предложений партнерами."
+          }
+          icon={hasActiveFilters ? "search-outline" : "pricetags-outline"}
+          actionLabel={hasActiveFilters ? "Сбросить фильтры" : undefined}
+          onAction={hasActiveFilters ? resetFilters : undefined}
         />
       )}
     </Screen>

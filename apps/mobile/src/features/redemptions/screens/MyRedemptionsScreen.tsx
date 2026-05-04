@@ -10,6 +10,7 @@ import type {
 } from "../../../core/navigation/routes";
 import { useRefresh } from "../../../shared/hooks/useRefresh";
 import { spacing } from "../../../shared/theme/spacing";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { Screen } from "../../../shared/ui/Screen";
 import { StateView } from "../../../shared/ui/StateView";
 import { ScreenHeader } from "../../../shared/ui/ScreenHeader";
@@ -53,12 +54,10 @@ export function MyRedemptionsScreen({ navigation }: Props) {
       {redemptionsQuery.isLoading ? (
         <StateView title="Загружаем QR" loading />
       ) : redemptionsQuery.error ? (
-        <StateView
-          title="Не удалось загрузить QR"
-          description={redemptionsQuery.error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={() => redemptionsQuery.refetch()}
+        <ErrorStateView
+          error={redemptionsQuery.error}
+          fallbackTitle="Не удалось загрузить QR"
+          onRetry={() => redemptionsQuery.refetch()}
         />
       ) : redemptions.length ? (
         <View style={styles.list}>
@@ -81,8 +80,14 @@ export function MyRedemptionsScreen({ navigation }: Props) {
       ) : (
         <StateView
           title="QR пока нет"
-          description="Открой предложение в каталоге и нажми “Получить QR”."
+          description="Открой предложение в каталоге и нажми “Получить QR”. После этого код появится здесь."
           icon="qr-code-outline"
+          actionLabel="Открыть каталог"
+          onAction={() =>
+            navigation.navigate("StudentTabs", {
+              screen: "Catalog",
+            })
+          }
         />
       )}
     </Screen>

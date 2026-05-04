@@ -13,6 +13,7 @@ import { useRefresh } from "../../../shared/hooks/useRefresh";
 import { colors } from "../../../shared/theme/colors";
 import { spacing } from "../../../shared/theme/spacing";
 import { AppText } from "../../../shared/ui/AppText";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { Screen } from "../../../shared/ui/Screen";
 import { StateView } from "../../../shared/ui/StateView";
 import { AppIcon } from "../../../shared/ui/AppIcon";
@@ -87,12 +88,10 @@ export function HomeScreen({ navigation }: Props) {
       {homeOffersQuery.isLoading ? (
         <StateView title="Загружаем предложения" loading />
       ) : homeOffersQuery.error ? (
-        <StateView
-          title="Не удалось загрузить предложения"
-          description={homeOffersQuery.error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={() => homeOffersQuery.refetch()}
+        <ErrorStateView
+          error={homeOffersQuery.error}
+          fallbackTitle="Не удалось загрузить предложения"
+          onRetry={() => homeOffersQuery.refetch()}
         />
       ) : (
         <View style={styles.sections}>
@@ -119,8 +118,14 @@ export function HomeScreen({ navigation }: Props) {
               ) : (
                 <StateView
                   title="Пока нет рекомендаций"
-                  description="Они появятся после публикации предложений партнерами."
+                  description="Они появятся после публикации предложений партнерами. Пока можно посмотреть весь каталог."
                   icon="pricetags-outline"
+                  actionLabel="Открыть каталог"
+                  onAction={() =>
+                    navigation.navigate("StudentTabs", {
+                      screen: "Catalog",
+                    })
+                  }
                 />
               )}
             </View>
@@ -149,8 +154,14 @@ export function HomeScreen({ navigation }: Props) {
               ) : (
                 <StateView
                   title="Пока нет новых скидок"
-                  description="Новые предложения появятся в этом разделе."
+                  description="Новые предложения появятся в этом разделе. Можно проверить каталог вручную."
                   icon="add-circle-outline"
+                  actionLabel="Открыть каталог"
+                  onAction={() =>
+                    navigation.navigate("StudentTabs", {
+                      screen: "Catalog",
+                    })
+                  }
                 />
               )}
             </View>

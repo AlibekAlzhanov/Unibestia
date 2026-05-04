@@ -14,6 +14,7 @@ import { spacing } from "../../../shared/theme/spacing";
 import { AppButton } from "../../../shared/ui/AppButton";
 import { AppCard } from "../../../shared/ui/AppCard";
 import { AppText } from "../../../shared/ui/AppText";
+import { ErrorStateView } from "../../../shared/ui/ErrorStateView";
 import { IconBadge } from "../../../shared/ui/IconBadge";
 import { Screen } from "../../../shared/ui/Screen";
 import { StateView } from "../../../shared/ui/StateView";
@@ -65,12 +66,10 @@ export function WalletScreen({ navigation }: Props) {
       {walletQuery.isLoading ? (
         <StateView title="Загружаем кошелек" loading />
       ) : walletQuery.error ? (
-        <StateView
-          title="Не удалось загрузить кошелек"
-          description={walletQuery.error.message}
-          icon="cloud-offline-outline"
-          actionLabel="Повторить"
-          onAction={() => walletQuery.refetch()}
+        <ErrorStateView
+          error={walletQuery.error}
+          fallbackTitle="Не удалось загрузить кошелек"
+          onRetry={() => walletQuery.refetch()}
         />
       ) : (
         <View style={styles.content}>
@@ -106,12 +105,10 @@ export function WalletScreen({ navigation }: Props) {
           {transactionsQuery.isLoading ? (
             <StateView title="Загружаем операции" loading />
           ) : transactionsQuery.error ? (
-            <StateView
-              title="Не удалось загрузить операции"
-              description={transactionsQuery.error.message}
-              icon="cloud-offline-outline"
-              actionLabel="Повторить"
-              onAction={() => transactionsQuery.refetch()}
+            <ErrorStateView
+              error={transactionsQuery.error}
+              fallbackTitle="Не удалось загрузить операции"
+              onRetry={() => transactionsQuery.refetch()}
             />
           ) : transactions.length ? (
             <View style={styles.list}>
@@ -125,8 +122,14 @@ export function WalletScreen({ navigation }: Props) {
           ) : (
             <StateView
               title="Операций пока нет"
-              description="Бонусы появятся после использования предложений или рефералов."
+              description="Бонусы появятся после использования предложений или приглашения друзей по реферальной программе."
               icon="receipt-outline"
+              actionLabel="Открыть каталог"
+              onAction={() =>
+                navigation.navigate("StudentTabs", {
+                  screen: "Catalog",
+                })
+              }
             />
           )}
         </View>
