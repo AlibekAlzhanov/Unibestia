@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { type FormEvent, type JSX, useEffect, useState } from "react";
+import { type FormEvent, type JSX, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC, useTRPCClient } from "@/utils/trpc";
@@ -13,6 +12,23 @@ type ProfileCompletionField = {
   key: string;
   label: string;
   isComplete: boolean;
+};
+
+type UniversityOption = {
+  id: string;
+  name: string;
+  shortName: string | null;
+  city: string | null;
+  country: string;
+};
+
+type EducationProgramOption = {
+  id: string;
+  code: string;
+  nameRu: string;
+  nameKz: string;
+  nameEn: string | null;
+  degree: string;
 };
 
 type ProfileData = {
@@ -34,14 +50,7 @@ type ProfileData = {
     email: string;
     domain: string;
     isAllowed: boolean;
-    university: {
-      id: string;
-      name: string;
-      shortName: string | null;
-      city: string | null;
-      country: string;
-      status: string;
-    } | null;
+    university: UniversityOption | null;
   };
   profileCompletion: {
     requiredFields: ProfileCompletionField[];
@@ -55,6 +64,7 @@ type ProfileData = {
   studentProfile: {
     id: string;
     universityId: string | null;
+    educationProgramGroupId: string | null;
     studentEmail: string | null;
     degree: string | null;
     specialty: string | null;
@@ -63,14 +73,8 @@ type ProfileData = {
     verificationStatus: string;
     verifiedAt: Date | string | null;
     verificationExpiresAt: Date | string | null;
-    university: {
-      id: string;
-      name: string;
-      shortName: string | null;
-      city: string | null;
-      country: string;
-      status: string;
-    } | null;
+    university: UniversityOption | null;
+    educationProgramGroup: EducationProgramOption | null;
     latestVerification: {
       id: string;
       method: string;
@@ -101,6 +105,15 @@ function toDegree(value: string | null | undefined): Degree {
   return "";
 }
 
+function parseOptionalCourse(value: string): number | undefined {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function readErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) {
     return error.message === "[object Object]" ? fallback : error.message;
@@ -111,8 +124,8 @@ function readErrorMessage(error: unknown, fallback: string): string {
   }
 
   if (typeof error === "object" && error !== null) {
-    const errorRecord = error as Record<string, unknown>;
-    const message = errorRecord.message;
+    const record = error as Record<string, unknown>;
+    const message = record.message;
 
     if (typeof message === "string") {
       return message;
@@ -122,14 +135,8 @@ function readErrorMessage(error: unknown, fallback: string): string {
       return message.join(", ");
     }
 
-    const errorText = errorRecord.error;
-
-    if (typeof errorText === "string") {
-      return errorText;
-    }
-
     try {
-      return JSON.stringify(errorRecord);
+      return JSON.stringify(record);
     } catch {
       return fallback;
     }
@@ -144,8 +151,8 @@ function readApiErrorMessage(payload: unknown, fallback: string): string {
   }
 
   if (typeof payload === "object" && payload !== null) {
-    const payloadRecord = payload as Record<string, unknown>;
-    const message = payloadRecord.message;
+    const record = payload as Record<string, unknown>;
+    const message = record.message;
 
     if (typeof message === "string") {
       return message;
@@ -155,16 +162,10 @@ function readApiErrorMessage(payload: unknown, fallback: string): string {
       return message.join(", ");
     }
 
-    const error = payloadRecord.error;
+    const error = record.error;
 
     if (typeof error === "string") {
       return error;
-    }
-
-    try {
-      return JSON.stringify(payloadRecord);
-    } catch {
-      return fallback;
     }
   }
 
@@ -199,27 +200,6 @@ function statusClass(status?: string | null): string {
   return "border-[#E5ECE9] bg-[#F7F6F1] text-[#526470]";
 }
 
-function parseOptionalCourse(value: string): number | undefined {
-  if (!value.trim()) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function completionColor(percentage: number): string {
-  if (percentage >= 100) {
-    return "text-green-700";
-  }
-
-  if (percentage >= 70) {
-    return "text-yellow-700";
-  }
-
-  return "text-red-700";
-}
-
 function degreeLabel(value?: string | null): string {
   const labels: Record<string, string> = {
     bachelor: "Бакалавриат",
@@ -237,6 +217,20 @@ function formatDate(value?: Date | string | null): string {
   }
 
   return new Date(value).toLocaleDateString("ru-RU");
+}
+
+function programLabel(program: EducationProgramOption | null | undefined): string {
+  if (!program) {
+    return "Не выбрана";
+  }
+
+  return `${program.code} — ${program.nameRu}`;
+}
+
+function completionColor(percentage: number): string {
+  if (percentage >= 100) return "text-green-700";
+  if (percentage >= 70) return "text-yellow-700";
+  return "text-red-700";
 }
 
 function LoadingProfile(): JSX.Element {
@@ -260,12 +254,6 @@ function LoadingProfile(): JSX.Element {
           <div className="ub-skeleton mt-5 h-5 w-2/3 rounded-full" />
           <div className="ub-skeleton mt-3 h-4 w-full rounded-full" />
         </section>
-
-        <section className="ub-card rounded-[34px] p-7">
-          <div className="ub-skeleton h-8 w-28 rounded-full" />
-          <div className="ub-skeleton mt-5 h-3 w-full rounded-full" />
-          <div className="ub-skeleton mt-4 h-12 rounded-2xl" />
-        </section>
       </aside>
     </div>
   );
@@ -277,20 +265,25 @@ export default function ProfilePage(): JSX.Element {
   const { getToken } = useAuth();
 
   const profileQuery = useQuery(trpc.profile.getMyProfile.queryOptions());
+  const universitiesQuery = useQuery(
+    trpc.universities.listActive.queryOptions({ limit: 100 })
+  );
+  const programsQuery = useQuery(
+    trpc.educationPrograms.listActive.queryOptions({ limit: 100 })
+  );
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
+  const [universityId, setUniversityId] = useState("");
+  const [educationProgramGroupId, setEducationProgramGroupId] = useState("");
   const [degree, setDegree] = useState<Degree>("");
-  const [specialty, setSpecialty] = useState("");
   const [course, setCourse] = useState("");
   const [admissionDate, setAdmissionDate] = useState("");
-  const [verificationDocument, setVerificationDocument] =
-    useState<File | null>(null);
+  const [verificationDocument, setVerificationDocument] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSubmittingVerification, setIsSubmittingVerification] =
-    useState(false);
+  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -301,23 +294,67 @@ export default function ProfilePage(): JSX.Element {
   const isAllowedStudentEmail = Boolean(domainCheck?.isAllowed);
   const canSubmitVerification = Boolean(completion?.canSubmitVerification);
 
-  useEffect(() => {
-    if (!profile) {
-      return;
+  const universities = useMemo(() => {
+    const items = (universitiesQuery.data?.items ?? []) as UniversityOption[];
+    const fallbackItems = [
+      domainCheck?.university,
+      studentProfile?.university,
+    ].filter(
+      (university): university is UniversityOption => Boolean(university?.id)
+    );
+
+    const byId = new Map<string, UniversityOption>();
+
+    for (const university of [...items, ...fallbackItems]) {
+      byId.set(university.id, university);
     }
+
+    return Array.from(byId.values()).sort((left, right) =>
+      left.name.localeCompare(right.name)
+    );
+  }, [
+    domainCheck?.university,
+    studentProfile?.university,
+    universitiesQuery.data?.items,
+  ]);
+
+  const programs = useMemo(
+    () => (programsQuery.data?.items ?? []) as EducationProgramOption[],
+    [programsQuery.data?.items]
+  );
+
+  const filteredPrograms = useMemo(() => {
+    return programs.filter((program) => !degree || program.degree === degree);
+  }, [degree, programs]);
+
+  const selectedProgram = useMemo(
+    () => programs.find((program) => program.id === educationProgramGroupId) ?? null,
+    [educationProgramGroupId, programs]
+  );
+
+  useEffect(() => {
+    if (!profile) return;
 
     setFirstName(profile.user.firstName ?? "");
     setLastName(profile.user.lastName ?? "");
     setDisplayName(profile.user.displayName ?? "");
     setPhone(profile.user.phone ?? "");
 
-    if (studentProfile) {
-      setDegree(toDegree(studentProfile.degree));
-      setSpecialty(studentProfile.specialty ?? "");
-      setCourse(studentProfile.course ? String(studentProfile.course) : "");
-      setAdmissionDate(studentProfile.admissionDate ?? "");
+    const resolvedUniversityId =
+      studentProfile?.universityId ?? domainCheck?.university?.id ?? "";
+
+    setUniversityId(resolvedUniversityId);
+    setEducationProgramGroupId(studentProfile?.educationProgramGroupId ?? "");
+    setDegree(toDegree(studentProfile?.degree));
+    setCourse(studentProfile?.course ? String(studentProfile.course) : "");
+    setAdmissionDate(studentProfile?.admissionDate ?? "");
+  }, [domainCheck?.university?.id, profile, studentProfile]);
+
+  useEffect(() => {
+    if (selectedProgram && selectedProgram.degree !== degree) {
+      setDegree(toDegree(selectedProgram.degree));
     }
-  }, [profile, studentProfile]);
+  }, [degree, selectedProgram]);
 
   async function handleSave(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -332,8 +369,9 @@ export default function ProfilePage(): JSX.Element {
         lastName: lastName.trim() || undefined,
         displayName: displayName.trim() || undefined,
         phone: phone.trim() || undefined,
-        degree: degree === "" ? undefined : degree,
-        specialty: specialty.trim() || undefined,
+        universityId: universityId || undefined,
+        educationProgramGroupId: educationProgramGroupId || undefined,
+        degree: degree === "" ? undefined : (degree as never),
         course: parseOptionalCourse(course),
         admissionDate: admissionDate || undefined,
       });
@@ -378,30 +416,23 @@ export default function ProfilePage(): JSX.Element {
       formData.append("document", verificationDocument);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
       const response = await fetch(`${apiUrl}/student-verifications/document`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
       const payload = (await response.json().catch(() => null)) as unknown;
 
       if (!response.ok) {
-        throw new Error(
-          readApiErrorMessage(payload, "Не удалось загрузить PDF")
-        );
+        throw new Error(readApiErrorMessage(payload, "Не удалось загрузить PDF"));
       }
 
       setMessage("PDF электронного студенческого отправлен на проверку.");
       setVerificationDocument(null);
       await profileQuery.refetch();
     } catch (caughtError) {
-      setError(
-        readErrorMessage(caughtError, "Не удалось отправить PDF на проверку")
-      );
+      setError(readErrorMessage(caughtError, "Не удалось отправить PDF на проверку"));
     } finally {
       setIsSubmittingVerification(false);
     }
@@ -426,14 +457,12 @@ export default function ProfilePage(): JSX.Element {
             <p className="mb-3 text-sm font-black uppercase tracking-[0.24em] text-[#FFB5A4]">
               Student Profile
             </p>
-
             <h1 className="max-w-3xl text-[34px] font-black leading-tight tracking-[-0.04em] md:text-5xl">
               Профиль студента UniBestia
             </h1>
-
             <p className="mt-4 max-w-2xl text-base leading-8 text-[#DDE8EA]">
-              Заполни данные, подтверди студенческий статус и получай доступ к
-              QR-скидкам, бонусам и персональной истории использований.
+              Выбери университет и группу образовательных программ из справочников,
+              затем загрузи PDF электронного студенческого для проверки.
             </p>
           </div>
 
@@ -444,7 +473,6 @@ export default function ProfilePage(): JSX.Element {
                 Готовность
               </p>
             </div>
-
             <div className="rounded-[24px] border border-white/15 bg-white/12 p-4 backdrop-blur-md">
               <p className="truncate text-2xl font-black">
                 {statusLabel(studentProfile?.verificationStatus)}
@@ -453,7 +481,6 @@ export default function ProfilePage(): JSX.Element {
                 Статус
               </p>
             </div>
-
             <div className="rounded-[24px] border border-white/15 bg-white/12 p-4 backdrop-blur-md">
               <p className="truncate text-2xl font-black">
                 {isAllowedStudentEmail ? "OK" : "NO"}
@@ -470,9 +497,7 @@ export default function ProfilePage(): JSX.Element {
         <LoadingProfile />
       ) : profileQuery.error ? (
         <div className="rounded-[30px] border border-red-200 bg-red-50 p-6 text-red-700">
-          <p className="text-sm font-black uppercase tracking-[0.14em]">
-            Ошибка загрузки
-          </p>
+          <p className="text-sm font-black uppercase tracking-[0.14em]">Ошибка загрузки</p>
           <p className="mt-2 text-sm leading-6">{profileQuery.error.message}</p>
         </div>
       ) : (
@@ -490,7 +515,6 @@ export default function ProfilePage(): JSX.Element {
                   Личная информация
                 </h2>
               </div>
-
               <span
                 className={[
                   "w-fit rounded-full border px-3 py-1 text-xs font-black",
@@ -513,9 +537,7 @@ export default function ProfilePage(): JSX.Element {
               </label>
 
               <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Фамилия *
-                </span>
+                <span className="text-sm font-black text-[#17384B]">Фамилия *</span>
                 <input
                   value={lastName}
                   onChange={(event) => setLastName(event.target.value)}
@@ -525,9 +547,7 @@ export default function ProfilePage(): JSX.Element {
               </label>
 
               <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Отображаемое имя
-                </span>
+                <span className="text-sm font-black text-[#17384B]">Отображаемое имя</span>
                 <input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
@@ -537,9 +557,7 @@ export default function ProfilePage(): JSX.Element {
               </label>
 
               <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Телефон *
-                </span>
+                <span className="text-sm font-black text-[#17384B]">Телефон *</span>
                 <input
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
@@ -553,11 +571,9 @@ export default function ProfilePage(): JSX.Element {
               <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
                 Студенческий email из Clerk
               </p>
-
               <p className="mt-3 break-all font-mono text-sm font-bold text-[#17384B]">
                 {profile?.user.email ?? "—"}
               </p>
-
               <div
                 className={[
                   "mt-4 rounded-2xl border p-4 text-sm leading-6",
@@ -568,18 +584,11 @@ export default function ProfilePage(): JSX.Element {
               >
                 {isAllowedStudentEmail ? (
                   <>
-                    Домен почты разрешён. Университет:{" "}
+                    Домен почты разрешён. Университет по домену:{" "}
                     <span className="font-black">{universityName}</span>
                   </>
                 ) : (
-                  <>
-                    Домен почты не разрешён для студенческого доступа. Для
-                    Satbayev используйте email вида{" "}
-                    <span className="font-mono font-black">
-                      name@stud.satbayev.university
-                    </span>
-                    .
-                  </>
+                  <>Домен почты не разрешён для студенческого доступа.</>
                 )}
               </div>
             </div>
@@ -595,12 +604,43 @@ export default function ProfilePage(): JSX.Element {
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Степень обучения *
-                </span>
+                <span className="text-sm font-black text-[#17384B]">Университет *</span>
+                <select
+                  value={universityId}
+                  onChange={(event) => setUniversityId(event.target.value)}
+                  disabled={universitiesQuery.isLoading}
+                  className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
+                >
+                  <option value="">Выберите университет</option>
+                  {universities.map((university) => (
+                    <option key={university.id} value={university.id}>
+                      {university.shortName || university.name}
+                      {university.city ? ` — ${university.city}` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                {universitiesQuery.error && (
+                  <p className="mt-2 text-xs font-bold text-red-600">
+                    Не удалось загрузить университеты: {universitiesQuery.error.message}
+                  </p>
+                )}
+
+                {!universitiesQuery.isLoading && universities.length === 0 && (
+                  <p className="mt-2 text-xs font-bold text-red-600">
+                    Активных университетов пока нет. Добавьте их в админ-панели.
+                  </p>
+                )}
+              </label>
+
+              <label>
+                <span className="text-sm font-black text-[#17384B]">Степень обучения *</span>
                 <select
                   value={degree}
-                  onChange={(event) => setDegree(event.target.value as Degree)}
+                  onChange={(event) => {
+                    setDegree(event.target.value as Degree);
+                    setEducationProgramGroupId("");
+                  }}
                   className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
                 >
                   <option value="">Выберите степень</option>
@@ -611,22 +651,31 @@ export default function ProfilePage(): JSX.Element {
                 </select>
               </label>
 
-              <label>
+              <label className="md:col-span-2">
                 <span className="text-sm font-black text-[#17384B]">
-                  Специальность *
+                  Группа образовательных программ *
                 </span>
-                <input
-                  value={specialty}
-                  onChange={(event) => setSpecialty(event.target.value)}
-                  minLength={2}
+                <select
+                  value={educationProgramGroupId}
+                  onChange={(event) => setEducationProgramGroupId(event.target.value)}
+                  disabled={programsQuery.isLoading}
                   className="mt-2 h-12 w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 text-sm font-semibold text-[#17384B] outline-none transition focus:border-[#FF9F8A] focus:bg-white focus:shadow-[0_0_0_4px_rgba(255,159,138,0.14)]"
-                />
+                >
+                  <option value="">Выберите группу образовательных программ</option>
+                  {filteredPrograms.map((program) => (
+                    <option key={program.id} value={program.id}>
+                      {program.code} — {program.nameRu}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs leading-5 text-[#6B7280]">
+                  Если списка нет, попросите администратора добавить программу в разделе
+                  “Образовательные программы”.
+                </p>
               </label>
 
               <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Курс *
-                </span>
+                <span className="text-sm font-black text-[#17384B]">Курс *</span>
                 <input
                   value={course}
                   onChange={(event) => setCourse(event.target.value)}
@@ -638,9 +687,7 @@ export default function ProfilePage(): JSX.Element {
               </label>
 
               <label>
-                <span className="text-sm font-black text-[#17384B]">
-                  Дата поступления *
-                </span>
+                <span className="text-sm font-black text-[#17384B]">Дата поступления *</span>
                 <input
                   value={admissionDate}
                   onChange={(event) => setAdmissionDate(event.target.value)}
@@ -655,7 +702,6 @@ export default function ProfilePage(): JSX.Element {
                 {message}
               </div>
             )}
-
             {error && (
               <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
                 {error}
@@ -689,46 +735,19 @@ export default function ProfilePage(): JSX.Element {
                     Готовность профиля
                   </h2>
                 </div>
-
-                <p
-                  className={[
-                    "text-4xl font-black",
-                    completionColor(completionPercent),
-                  ].join(" ")}
-                >
-                  {completionPercent}%
-                </p>
+                <p className={["text-4xl font-black", completionColor(completionPercent)].join(" ")}>{completionPercent}%</p>
               </div>
-
               <div className="mt-5 h-3 overflow-hidden rounded-full bg-[#F7F6F1]">
-                <div
-                  className="h-full rounded-full bg-[#FF9F8A] transition-all"
-                  style={{ width: `${completionPercent}%` }}
-                />
+                <div className="h-full rounded-full bg-[#FF9F8A] transition-all" style={{ width: `${completionPercent}%` }} />
               </div>
-
               <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-                Заполнено {completion?.completedCount ?? 0} из{" "}
-                {completion?.totalCount ?? 0} обязательных пунктов.
+                Заполнено {completion?.completedCount ?? 0} из {completion?.totalCount ?? 0} обязательных пунктов.
               </p>
-
               <div className="mt-5 grid gap-2">
                 {(completion?.requiredFields ?? []).map((field) => (
-                  <div
-                    key={field.key}
-                    className="flex items-center justify-between gap-4 rounded-2xl bg-[#F9FAF8] px-4 py-3 text-sm"
-                  >
-                    <span className="font-bold text-[#17384B]">
-                      {field.label}
-                    </span>
-
-                    <span
-                      className={
-                        field.isComplete
-                          ? "shrink-0 font-black text-green-700"
-                          : "shrink-0 font-black text-red-700"
-                      }
-                    >
+                  <div key={field.key} className="flex items-center justify-between gap-4 rounded-2xl bg-[#F9FAF8] px-4 py-3 text-sm">
+                    <span className="font-bold text-[#17384B]">{field.label}</span>
+                    <span className={field.isComplete ? "shrink-0 font-black text-green-700" : "shrink-0 font-black text-red-700"}>
                       {field.isComplete ? "готово" : "нужно"}
                     </span>
                   </div>
@@ -740,40 +759,29 @@ export default function ProfilePage(): JSX.Element {
               <p className="text-sm font-black uppercase tracking-[0.2em] text-[#9CA3AF]">
                 Verification
               </p>
-
               <h2 className="mt-1 text-2xl font-black text-[#17384B]">
                 Верификация студента
               </h2>
-
-              <div
-                className={[
-                  "mt-5 rounded-2xl border p-4 text-sm font-black",
-                  statusClass(studentProfile?.verificationStatus),
-                ].join(" ")}
-              >
+              <div className={["mt-5 rounded-2xl border p-4 text-sm font-black", statusClass(studentProfile?.verificationStatus)].join(" ")}>
                 {statusLabel(studentProfile?.verificationStatus)}
               </div>
 
               <div className="mt-4 grid gap-3 rounded-[26px] bg-[#F9FAF8] p-4 text-sm text-[#526470]">
                 <div className="flex items-center justify-between gap-4">
                   <span>Университет</span>
-                  <span className="font-black text-[#17384B]">
-                    {universityName}
-                  </span>
+                  <span className="text-right font-black text-[#17384B]">{universityName}</span>
                 </div>
-
+                <div className="flex items-center justify-between gap-4">
+                  <span>Программа</span>
+                  <span className="text-right font-black text-[#17384B]">{programLabel(studentProfile?.educationProgramGroup)}</span>
+                </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>Степень</span>
-                  <span className="font-black text-[#17384B]">
-                    {degreeLabel(studentProfile?.degree)}
-                  </span>
+                  <span className="font-black text-[#17384B]">{degreeLabel(studentProfile?.degree)}</span>
                 </div>
-
                 <div className="flex items-center justify-between gap-4">
                   <span>Проверен</span>
-                  <span className="font-black text-[#17384B]">
-                    {formatDate(studentProfile?.verifiedAt)}
-                  </span>
+                  <span className="font-black text-[#17384B]">{formatDate(studentProfile?.verifiedAt)}</span>
                 </div>
               </div>
 
@@ -781,15 +789,9 @@ export default function ProfilePage(): JSX.Element {
                 <div className="mt-4 rounded-2xl border border-[#E5ECE9] bg-white p-4 text-sm text-[#6B7280]">
                   <p>
                     Последняя заявка:{" "}
-                    <span className="font-black text-[#17384B]">
-                      {studentProfile.latestVerification.status}
-                    </span>
+                    <span className="font-black text-[#17384B]">{studentProfile.latestVerification.status}</span>
                   </p>
-
-                  <p className="mt-1">
-                    Метод: {studentProfile.latestVerification.method}
-                  </p>
-
+                  <p className="mt-1">Метод: {studentProfile.latestVerification.method}</p>
                   {studentProfile.latestVerification.reviewComment && (
                     <p className="mt-2 rounded-2xl bg-red-50 p-3 text-red-700">
                       {studentProfile.latestVerification.reviewComment}
@@ -799,89 +801,30 @@ export default function ProfilePage(): JSX.Element {
               )}
 
               <label className="mt-5 block">
-                <span className="text-sm font-black text-[#17384B]">
-                  PDF электронного студенческого *
-                </span>
-
+                <span className="text-sm font-black text-[#17384B]">PDF электронного студенческого *</span>
                 <input
                   type="file"
                   accept="application/pdf"
-                  onChange={(event) =>
-                    setVerificationDocument(event.target.files?.[0] ?? null)
-                  }
+                  onChange={(event) => setVerificationDocument(event.target.files?.[0] ?? null)}
                   disabled={!canSubmitVerification}
-                  className="mt-2 block w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-3 text-sm text-[#526470] file:mr-4 file:rounded-xl file:border-0 file:bg-[#17384B] file:px-4 file:py-2 file:text-sm file:font-bold file:text-white disabled:opacity-60"
+                  className="mt-2 block w-full rounded-2xl border border-[#D8E3DE] bg-[#F9FAF8] px-4 py-3 text-sm text-[#526470] file:mr-4 file:rounded-xl file:border-0 file:bg-[#17384B] file:px-4 file:py-2 file:text-sm file:font-black file:text-white disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
 
-              {verificationDocument && (
-                <div className="mt-3 rounded-2xl border border-[#E5ECE9] bg-[#F9FAF8] p-4 text-sm text-[#526470]">
-                  <p className="font-black text-[#17384B]">
-                    {verificationDocument.name}
-                  </p>
-
-                  <p className="mt-1">
-                    Размер:{" "}
-                    {(verificationDocument.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
-              )}
-
               <button
                 type="button"
-                onClick={submitVerification}
-                disabled={
-                  isSubmittingVerification ||
-                  !isAllowedStudentEmail ||
-                  !canSubmitVerification ||
-                  !verificationDocument ||
-                  studentProfile?.verificationStatus === "pending_review" ||
-                  studentProfile?.verificationStatus === "verified"
-                }
-                className="mt-5 w-full rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-black text-white shadow-[0_14px_30px_rgba(23,56,75,0.18)] transition hover:-translate-y-0.5 hover:bg-[#255B73] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void submitVerification()}
+                disabled={!canSubmitVerification || isSubmittingVerification}
+                className="mt-4 w-full rounded-2xl bg-[#17384B] px-5 py-3 text-sm font-black text-white shadow-[0_12px_24px_rgba(23,56,75,0.16)] transition hover:bg-[#255B73] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSubmittingVerification
-                  ? "Загружаем..."
-                  : "Загрузить PDF и отправить на проверку"}
+                {isSubmittingVerification ? "Отправляем..." : "Отправить PDF на проверку"}
               </button>
 
               {!canSubmitVerification && (
                 <p className="mt-3 text-sm leading-6 text-[#6B7280]">
-                  Перед отправкой заявки нужно заполнить обязательные поля
-                  профиля и выбрать PDF электронного студенческого.
+                  Сначала заполните обязательные поля профиля и выберите группу образовательных программ.
                 </p>
               )}
-            </section>
-
-            <section className="rounded-[34px] border border-[#E5ECE9] bg-[linear-gradient(135deg,#FFFFFF_0%,#FFF7F4_100%)] p-6 shadow-[0_16px_36px_rgba(15,23,42,0.05)] md:p-7">
-              <p className="text-sm font-black uppercase tracking-[0.2em] text-[#FF7F6E]">
-                Быстрый переход
-              </p>
-
-              <h2 className="mt-1 text-2xl font-black text-[#17384B]">
-                Что дальше?
-              </h2>
-
-              <p className="mt-3 text-sm leading-7 text-[#6B7280]">
-                После сохранения профиля и верификации можно переходить к
-                каталогу, получать QR-коды и отслеживать свои скидки.
-              </p>
-
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/catalog"
-                  className="rounded-2xl bg-[#17384B] px-5 py-3 text-center text-sm font-black text-white transition hover:bg-[#255B73]"
-                >
-                  Каталог
-                </Link>
-
-                <Link
-                  href="/my-redemptions"
-                  className="rounded-2xl border border-[#D8E3DE] bg-white px-5 py-3 text-center text-sm font-black text-[#17384B] transition hover:bg-[#F7F6F1]"
-                >
-                  Мои скидки
-                </Link>
-              </div>
             </section>
           </aside>
         </div>

@@ -3,6 +3,8 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { TRPCError } from "@trpc/server";
 import { Repository } from "typeorm";
 import {
+  EducationDegree,
+  EducationProgramGroup,
   Role,
   StudentProfile,
   StudentVerification,
@@ -38,13 +40,20 @@ type StudentProfileCompletionField = {
     | "phone"
     | "studentEmail"
     | "degree"
-    | "specialty"
+    | "educationProgramGroup"
     | "course"
     | "admissionDate"
     | "university";
   label: string;
   isComplete: boolean;
 };
+
+const educationDegreeInputSchema = z.enum([
+  EducationDegree.BACHELOR,
+  EducationDegree.MASTER,
+  EducationDegree.PHD,
+  EducationDegree.OTHER,
+]);
 
 @Injectable()
 export class ProfileRouter {
@@ -53,8 +62,6 @@ export class ProfileRouter {
     private readonly usersRepo: Repository<User>,
     @InjectRepository(UserRole)
     private readonly userRolesRepo: Repository<UserRole>,
-    @InjectRepository(Role)
-    private readonly rolesRepo: Repository<Role>,
     @InjectRepository(StudentProfile)
     private readonly studentProfilesRepo: Repository<StudentProfile>,
     @InjectRepository(StudentVerification)
@@ -62,7 +69,9 @@ export class ProfileRouter {
     @InjectRepository(University)
     private readonly universitiesRepo: Repository<University>,
     @InjectRepository(UniversityEmailDomain)
-    private readonly universityEmailDomainsRepo: Repository<UniversityEmailDomain>
+    private readonly universityEmailDomainsRepo: Repository<UniversityEmailDomain>,
+    @InjectRepository(EducationProgramGroup)
+    private readonly educationProgramGroupsRepo: Repository<EducationProgramGroup>
   ) {}
 
   private normalizeEmail(email: string): string {
@@ -71,7 +80,6 @@ export class ProfileRouter {
 
   private normalizeNullableText(value: string | null | undefined): string | null {
     const normalized = value?.trim();
-
     return normalized ? normalized : null;
   }
 
@@ -98,9 +106,7 @@ export class ProfileRouter {
   }
 
   private async findLocalUserByClerkId(clerkUserId: string) {
-    return this.usersRepo.findOne({
-      where: { clerkUserId },
-    });
+    return this.usersRepo.findOne({ where: { clerkUserId } });
   }
 
   private async getOrCreateCurrentUser(ctx: AuthContextLike): Promise<User> {
@@ -138,11 +144,12 @@ export class ProfileRouter {
         ctx.auth.user?.firstName ?? existingByClerkId.firstName;
       existingByClerkId.lastName =
         ctx.auth.user?.lastName ?? existingByClerkId.lastName;
+
       if (!existingByClerkId.avatarUrl && ctx.auth.user?.imageUrl) {
         existingByClerkId.avatarUrl = ctx.auth.user.imageUrl;
       }
-      existingByClerkId.lastLoginAt = new Date();
 
+      existingByClerkId.lastLoginAt = new Date();
       return this.usersRepo.save(existingByClerkId);
     }
 
@@ -153,21 +160,18 @@ export class ProfileRouter {
       });
     }
 
-    const existingByEmail = await this.usersRepo.findOne({
-      where: { email: clerkEmail },
-    });
+    const existingByEmail = await this.usersRepo.findOne({ where: { email: clerkEmail } });
 
     if (existingByEmail) {
       existingByEmail.clerkUserId = ctx.auth.userId;
-      existingByEmail.firstName =
-        ctx.auth.user?.firstName ?? existingByEmail.firstName;
-      existingByEmail.lastName =
-        ctx.auth.user?.lastName ?? existingByEmail.lastName;
+      existingByEmail.firstName = ctx.auth.user?.firstName ?? existingByEmail.firstName;
+      existingByEmail.lastName = ctx.auth.user?.lastName ?? existingByEmail.lastName;
+
       if (!existingByEmail.avatarUrl && ctx.auth.user?.imageUrl) {
         existingByEmail.avatarUrl = ctx.auth.user.imageUrl;
       }
-      existingByEmail.lastLoginAt = new Date();
 
+      existingByEmail.lastLoginAt = new Date();
       return this.usersRepo.save(existingByEmail);
     }
 
@@ -206,13 +210,8 @@ export class ProfileRouter {
     const domain = this.getEmailDomain(email);
 
     const emailDomain = await this.universityEmailDomainsRepo.findOne({
-      where: {
-        domain,
-        isActive: true,
-      },
-      relations: {
-        university: true,
-      },
+      where: { domain, isActive: true },
+      relations: { university: true },
     });
 
     return {
@@ -240,30 +239,48 @@ export class ProfileRouter {
     return domainCheck;
   }
 
+  private async requireActiveUniversity(universityId: string): Promise<University> {
+    const university = await this.universitiesRepo.findOne({
+      where: { id: universityId, status: UniversityStatus.ACTIVE },
+    });
+
+    if (!university) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Selected university is not active or does not exist",
+      });
+    }
+
+    return university;
+  }
+
+  private async requireActiveEducationProgramGroup(
+    educationProgramGroupId: string
+  ): Promise<EducationProgramGroup> {
+    const program = await this.educationProgramGroupsRepo.findOne({
+      where: { id: educationProgramGroupId, isActive: true },
+    });
+
+    if (!program) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Selected education program group is not active or does not exist",
+      });
+    }
+
+    return program;
+  }
+
   private buildProfileCompletion(
     user: User,
     studentProfile: StudentProfile | null,
-    domainCheck: {
-      isAllowed: boolean;
-      university: University | null;
-    }
+    domainCheck: { isAllowed: boolean; university: University | null }
   ) {
     const fields: StudentProfileCompletionField[] = [
-      {
-        key: "firstName",
-        label: "Имя",
-        isComplete: this.hasValue(user.firstName),
-      },
-      {
-        key: "lastName",
-        label: "Фамилия",
-        isComplete: this.hasValue(user.lastName),
-      },
-      {
-        key: "phone",
-        label: "Телефон",
-        isComplete: this.hasValue(user.phone),
-      },
+      { key: "firstName", label: "Имя", isComplete: this.hasValue(user.firstName) },
+      { key: "lastName", label: "Фамилия", isComplete: this.hasValue(user.lastName) },
+      { key: "phone", label: "Телефон", isComplete: this.hasValue(user.phone) },
       {
         key: "studentEmail",
         label: "Студенческая почта",
@@ -271,8 +288,8 @@ export class ProfileRouter {
       },
       {
         key: "university",
-        label: "Университет по домену",
-        isComplete: Boolean(domainCheck.university),
+        label: "Университет",
+        isComplete: Boolean(studentProfile?.universityId ?? domainCheck.university?.id),
       },
       {
         key: "degree",
@@ -280,15 +297,11 @@ export class ProfileRouter {
         isComplete: this.hasValue(studentProfile?.degree),
       },
       {
-        key: "specialty",
-        label: "Специальность",
-        isComplete: this.hasValue(studentProfile?.specialty),
+        key: "educationProgramGroup",
+        label: "Группа образовательных программ",
+        isComplete: this.hasValue(studentProfile?.educationProgramGroupId),
       },
-      {
-        key: "course",
-        label: "Курс",
-        isComplete: this.hasValue(studentProfile?.course),
-      },
+      { key: "course", label: "Курс", isComplete: this.hasValue(studentProfile?.course) },
       {
         key: "admissionDate",
         label: "Дата поступления",
@@ -307,10 +320,35 @@ export class ProfileRouter {
       percentage: Math.round((completedCount / fields.length) * 100),
       isComplete: missingFields.length === 0,
       canSubmitVerification:
-        missingFields.length === 0 &&
-        Boolean(studentProfile) &&
-        domainCheck.isAllowed,
+        missingFields.length === 0 && Boolean(studentProfile) && domainCheck.isAllowed,
     };
+  }
+
+  private mapUniversity(university: University | null) {
+    return university
+      ? {
+          id: university.id,
+          name: university.name,
+          shortName: university.shortName,
+          city: university.city,
+          country: university.country,
+          status: university.status,
+        }
+      : null;
+  }
+
+  private mapEducationProgramGroup(program: EducationProgramGroup | null) {
+    return program
+      ? {
+          id: program.id,
+          code: program.code,
+          nameRu: program.nameRu,
+          nameKz: program.nameKz,
+          nameEn: program.nameEn,
+          degree: program.degree,
+          isActive: program.isActive,
+        }
+      : null;
   }
 
   private async buildProfilePayload(user: User) {
@@ -322,21 +360,21 @@ export class ProfileRouter {
     });
 
     const university = studentProfile?.universityId
-      ? await this.universitiesRepo.findOne({
-          where: { id: studentProfile.universityId },
-        })
+      ? await this.universitiesRepo.findOne({ where: { id: studentProfile.universityId } })
       : domainCheck.university;
+
+    const educationProgramGroup = studentProfile?.educationProgramGroupId
+      ? await this.educationProgramGroupsRepo.findOne({
+          where: { id: studentProfile.educationProgramGroupId },
+        })
+      : null;
 
     const latestVerification = await this.studentVerificationsRepo.findOne({
       where: { userId: user.id },
       order: { createdAt: "DESC" },
     });
 
-    const profileCompletion = this.buildProfileCompletion(
-      user,
-      studentProfile,
-      domainCheck
-    );
+    const profileCompletion = this.buildProfileCompletion(user, studentProfile, domainCheck);
 
     return {
       user: {
@@ -357,22 +395,14 @@ export class ProfileRouter {
         email: user.email,
         domain: domainCheck.domain,
         isAllowed: domainCheck.isAllowed,
-        university: domainCheck.university
-          ? {
-              id: domainCheck.university.id,
-              name: domainCheck.university.name,
-              shortName: domainCheck.university.shortName,
-              city: domainCheck.university.city,
-              country: domainCheck.university.country,
-              status: domainCheck.university.status,
-            }
-          : null,
+        university: this.mapUniversity(domainCheck.university),
       },
       profileCompletion,
       studentProfile: studentProfile
         ? {
             id: studentProfile.id,
             universityId: studentProfile.universityId,
+            educationProgramGroupId: studentProfile.educationProgramGroupId,
             studentEmail: studentProfile.studentEmail,
             degree: studentProfile.degree,
             specialty: studentProfile.specialty,
@@ -381,16 +411,8 @@ export class ProfileRouter {
             verificationStatus: studentProfile.verificationStatus,
             verifiedAt: studentProfile.verifiedAt,
             verificationExpiresAt: studentProfile.verificationExpiresAt,
-            university: university
-              ? {
-                  id: university.id,
-                  name: university.name,
-                  shortName: university.shortName,
-                  city: university.city,
-                  country: university.country,
-                  status: university.status,
-                }
-              : null,
+            university: this.mapUniversity(university),
+            educationProgramGroup: this.mapEducationProgramGroup(educationProgramGroup),
             latestVerification: latestVerification
               ? {
                   id: latestVerification.id,
@@ -418,10 +440,11 @@ export class ProfileRouter {
     input: {
       firstName?: string;
       lastName?: string;
-      degree?: string;
-      specialty?: string;
+      degree?: EducationDegree;
+      educationProgramGroupId?: string;
       course?: number;
       admissionDate?: string;
+      universityId?: string;
     }
   ): boolean {
     if (studentProfile.verificationStatus !== StudentVerificationStatus.VERIFIED) {
@@ -430,22 +453,22 @@ export class ProfileRouter {
 
     const nextFirstName = this.normalizeNullableText(input.firstName) ?? existingUser.firstName;
     const nextLastName = this.normalizeNullableText(input.lastName) ?? existingUser.lastName;
-    const nextDegree =
-      this.normalizeNullableText(input.degree) ?? studentProfile.degree;
-    const nextSpecialty =
-      this.normalizeNullableText(input.specialty) ?? studentProfile.specialty;
+    const nextDegree = input.degree ?? studentProfile.degree;
+    const nextEducationProgramGroupId =
+      input.educationProgramGroupId ?? studentProfile.educationProgramGroupId;
     const nextCourse = input.course ?? studentProfile.course;
     const nextAdmissionDate =
-      this.normalizeNullableText(input.admissionDate) ??
-      studentProfile.admissionDate;
+      this.normalizeNullableText(input.admissionDate) ?? studentProfile.admissionDate;
+    const nextUniversityId = input.universityId ?? studentProfile.universityId;
 
     return (
       nextFirstName !== existingUser.firstName ||
       nextLastName !== existingUser.lastName ||
       nextDegree !== studentProfile.degree ||
-      nextSpecialty !== studentProfile.specialty ||
+      nextEducationProgramGroupId !== studentProfile.educationProgramGroupId ||
       nextCourse !== studentProfile.course ||
-      nextAdmissionDate !== studentProfile.admissionDate
+      nextAdmissionDate !== studentProfile.admissionDate ||
+      nextUniversityId !== studentProfile.universityId
     );
   }
 
@@ -488,7 +511,9 @@ export class ProfileRouter {
             .trim()
             .regex(/^\+?[0-9\s()-]{7,30}$/, "Invalid phone format")
             .optional(),
-          degree: z.enum(["bachelor", "master", "phd", "other"]).optional(),
+          universityId: z.string().uuid().optional(),
+          educationProgramGroupId: z.string().uuid().optional(),
+          degree: educationDegreeInputSchema.optional(),
           specialty: z.string().trim().min(2).max(150).optional(),
           course: z.number().int().min(1).max(8).optional(),
           admissionDate: z
@@ -499,9 +524,7 @@ export class ProfileRouter {
       )
       .mutation(async ({ ctx, input }) => {
         const user = await this.getOrCreateCurrentUser(ctx);
-        const domainCheck = await this.requireAllowedStudentEmailDomain(
-          user.email
-        );
+        const domainCheck = await this.requireAllowedStudentEmailDomain(user.email);
         const allowedUniversity = domainCheck.university;
 
         if (!allowedUniversity) {
@@ -511,18 +534,42 @@ export class ProfileRouter {
           });
         }
 
+        const selectedUniversityId = input.universityId ?? allowedUniversity.id;
+        await this.requireActiveUniversity(selectedUniversityId);
+
+        if (selectedUniversityId !== allowedUniversity.id) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Selected university does not match your approved student email domain",
+          });
+        }
+
+        const selectedProgram = input.educationProgramGroupId
+          ? await this.requireActiveEducationProgramGroup(input.educationProgramGroupId)
+          : null;
+
+        const resolvedDegree = input.degree ?? selectedProgram?.degree ?? null;
+
+        if (selectedProgram && resolvedDegree && selectedProgram.degree !== resolvedDegree) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Selected education program group does not match selected degree",
+          });
+        }
+
         let studentProfile = await this.studentProfilesRepo.findOne({
           where: { userId: user.id },
         });
 
-        const shouldResetVerification =
-          studentProfile
-            ? this.shouldResetVerificationAfterProfileChange(
-                user,
-                studentProfile,
-                input
-              )
-            : false;
+        const shouldResetVerification = studentProfile
+          ? this.shouldResetVerificationAfterProfileChange(user, studentProfile, {
+              ...input,
+              universityId: selectedUniversityId,
+              degree: resolvedDegree ?? undefined,
+            })
+          : false;
 
         user.firstName = this.normalizeNullableText(input.firstName) ?? user.firstName;
         user.lastName = this.normalizeNullableText(input.lastName) ?? user.lastName;
@@ -542,10 +589,13 @@ export class ProfileRouter {
         if (!studentProfile) {
           studentProfile = this.studentProfilesRepo.create({
             userId: user.id,
-            universityId: allowedUniversity.id,
+            universityId: selectedUniversityId,
+            educationProgramGroupId: input.educationProgramGroupId ?? null,
             studentEmail: user.email,
-            degree: this.normalizeNullableText(input.degree),
-            specialty: this.normalizeNullableText(input.specialty),
+            degree: resolvedDegree,
+            specialty: selectedProgram
+              ? `${selectedProgram.code} ${selectedProgram.nameRu}`
+              : this.normalizeNullableText(input.specialty),
             course: input.course ?? null,
             admissionDate: this.normalizeNullableText(input.admissionDate),
             verificationStatus: StudentVerificationStatus.UNVERIFIED,
@@ -553,43 +603,34 @@ export class ProfileRouter {
             verificationExpiresAt: null,
           });
         } else {
-          studentProfile.universityId = allowedUniversity.id;
+          studentProfile.universityId = selectedUniversityId;
+          studentProfile.educationProgramGroupId =
+            input.educationProgramGroupId ?? studentProfile.educationProgramGroupId;
           studentProfile.studentEmail = user.email;
-          studentProfile.degree =
-            this.normalizeNullableText(input.degree) ?? studentProfile.degree;
-          studentProfile.specialty =
-            this.normalizeNullableText(input.specialty) ??
-            studentProfile.specialty;
+          studentProfile.degree = resolvedDegree ?? studentProfile.degree;
+          studentProfile.specialty = selectedProgram
+            ? `${selectedProgram.code} ${selectedProgram.nameRu}`
+            : this.normalizeNullableText(input.specialty) ?? studentProfile.specialty;
           studentProfile.course = input.course ?? studentProfile.course;
           studentProfile.admissionDate =
-            this.normalizeNullableText(input.admissionDate) ??
-            studentProfile.admissionDate;
+            this.normalizeNullableText(input.admissionDate) ?? studentProfile.admissionDate;
 
           if (
-            studentProfile.verificationStatus ===
-              StudentVerificationStatus.REJECTED ||
+            studentProfile.verificationStatus === StudentVerificationStatus.REJECTED ||
             shouldResetVerification
           ) {
-            studentProfile.verificationStatus =
-              StudentVerificationStatus.UNVERIFIED;
+            studentProfile.verificationStatus = StudentVerificationStatus.UNVERIFIED;
             studentProfile.verifiedAt = null;
             studentProfile.verificationExpiresAt = null;
           }
         }
 
         await this.studentProfilesRepo.save(studentProfile);
-
         return this.buildProfilePayload(user);
       }),
 
     submitStudentVerification: protectedProcedure
-      .input(
-        z
-          .object({
-            method: z.literal("edu_email").default("edu_email"),
-          })
-          .optional()
-      )
+      .input(z.object({ method: z.literal("edu_email").default("edu_email") }).optional())
       .mutation(async ({ ctx }) => {
         const user = await this.getOrCreateCurrentUser(ctx);
         await this.requireAllowedStudentEmailDomain(user.email);
@@ -621,10 +662,7 @@ export class ProfileRouter {
           });
         }
 
-        if (
-          studentProfile.verificationStatus ===
-          StudentVerificationStatus.PENDING_REVIEW
-        ) {
+        if (studentProfile.verificationStatus === StudentVerificationStatus.PENDING_REVIEW) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Verification request is already pending review",
@@ -655,13 +693,11 @@ export class ProfileRouter {
         await this.studentVerificationsRepo.save(verification);
 
         studentProfile.studentEmail = user.email;
-        studentProfile.verificationStatus =
-          StudentVerificationStatus.PENDING_REVIEW;
+        studentProfile.verificationStatus = StudentVerificationStatus.PENDING_REVIEW;
         studentProfile.verifiedAt = null;
         studentProfile.verificationExpiresAt = null;
 
         await this.studentProfilesRepo.save(studentProfile);
-
         return this.buildProfilePayload(user);
       }),
   });
