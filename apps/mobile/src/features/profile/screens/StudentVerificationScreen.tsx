@@ -41,6 +41,7 @@ import {
 import { ProfileCompletionCard } from "../ui/ProfileCompletionCard";
 import { StatusBadge } from "../ui/StatusBadge";
 import { StudentDocumentUploadCard } from "../ui/StudentDocumentUploadCard";
+import { VerificationStepsCard } from "../ui/VerificationStepsCard";
 
 type Props = NativeStackScreenProps<StudentStackParamList, "Verification">;
 
@@ -176,6 +177,8 @@ export function StudentVerificationScreen({ navigation }: Props) {
             <StatusBadge label={verificationStatusLabel(status)} />
             <StatusBadge label={readUniversityName(profile)} />
           </View>
+
+          <VerificationStepsCard profile={profile} />
 
           <AppCard>
             <View style={styles.cardTitleRow}>
