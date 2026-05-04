@@ -1,223 +1,135 @@
-# Mobile App (Expo)
+# UniBestia Mobile
 
-This React Native application built with Expo provides a mobile interface for the platform.
+Expo/React Native мобильное приложение для студента UniBestia.
 
-## Features
+Приложение покрывает клиентский сценарий:
 
-- Cross-platform support (iOS and Android)
-- Integration with shared packages
-- Type-safe API communication with tRPC
-- Real-time functionality with WebSockets
-- UI components with Tamagui
-- Analytics tracking
+- авторизация через Clerk
+- главная с популярными и новыми скидками
+- каталог и поиск предложений
+- избранное
+- получение QR-кода
+- просмотр статуса QR
+- безопасное отображение QR без raw token
+- отзыв после использования QR
+- кошелек, бонусы и рефералы
+- уведомления
+- профиль студента
+- загрузка аватарки через backend/R2
+- загрузка PDF электронного студенческого
+- просмотр текущего PDF студенческого
 
-## Development
+## Запуск
 
-```bash
-# From the mobile directory
-pnpm run dev
+Из корня проекта:
 
-# Or from the root directory
-pnpm run dev:mobile
+```powershell
+pnpm --filter @repo/mobile type-check
+pnpm dev:mobile
 ```
 
-## Package Integrations
+Или из папки приложения:
 
-### tRPC Integration
-
-The mobile app uses tRPC for type-safe API communication:
-
-```tsx
-// app/screens/HomeScreen.tsx
-import { trpc } from '../utils/trpc';
-
-export default function HomeScreen() {
-  const { data, isLoading } = trpc.users.getProfile.useQuery();
-  
-  if (isLoading) {
-    return <LoadingIndicator />;
-  }
-  
-  return (
-    <View>
-      <Text>Welcome, {data.name}!</Text>
-    </View>
-  );
-}
+```powershell
+cd apps/mobile
+pnpm dev
 ```
 
-### WebSockets Integration
+## Environment
 
-Real-time communication using the WebSockets package:
-
-```tsx
-// app/utils/socket.ts
-import { createTypedSocketClient, ClientEvents, ServerEvents } from '@repo/websockets';
-
-export const socket = createTypedSocketClient('http://your-api-url');
-
-// In your component
-import { socket } from '../utils/socket';
-import { useEffect, useState } from 'react';
-
-export function ChatScreen({ roomId }) {
-  const [messages, setMessages] = useState([]);
-  
-  useEffect(() => {
-    // Join room
-    socket.emit(ClientEvents.JOIN_ROOM, roomId);
-    
-    // Listen for messages
-    socket.on(ServerEvents.MESSAGE, (message) => {
-      setMessages((prev) => [...prev, message]);
-    });
-    
-    return () => {
-      // Leave room on unmount
-      socket.emit(ClientEvents.LEAVE_ROOM, roomId);
-      socket.off(ServerEvents.MESSAGE);
-    };
-  }, [roomId]);
-  
-  // Send message function
-  const sendMessage = (content) => {
-    socket.emit(ClientEvents.SEND_MESSAGE, {
-      roomId,
-      content
-    });
-  };
-  
-  return (/* Chat UI */);
-}
-```
-
-### Tamagui UI Component Usage
-
-Tamagui is integrated for a consistent and performant UI experience:
-
-```tsx
-import React, { useState } from 'react';
-import { Button, Card, H2, Paragraph, View, Input } from 'tamagui';
-
-export function ProfileCard({ user }) {
-  const [bio, setBio] = useState(user?.bio || '');
-  
-  return (
-    <Card
-      bordered
-      elevate
-      size="$4"
-      animation="bouncy"
-      width="100%"
-      scale={0.9}
-      hoverStyle={{ scale: 0.925 }}
-      pressStyle={{ scale: 0.875 }}
-      theme="active"
-    >
-      <Card.Header padded>
-        <H2>{user?.name || 'User Profile'}</H2>
-        <Paragraph>{user?.email}</Paragraph>
-      </Card.Header>
-      
-      <Card.Footer padded>
-        <View style={{ gap: 12 }}>
-          <Input
-            placeholder="Enter your bio"
-            value={bio}
-            onChangeText={setBio}
-            width="100%"
-          />
-          <Button theme="blue" onPress={() => console.log('Bio updated:', bio)}>
-            Update Profile
-          </Button>
-        </View>
-      </Card.Footer>
-    </Card>
-  );
-}
-```
-
-### Analytics Integration
-
-Track user events:
-
-```tsx
-import { Analytics } from '@repo/analytics/mobile';
-
-// In your component
-function FeatureScreen() {
-  const handleAction = () => {
-    // Track the action
-    Analytics.track('feature_used', {
-      featureId: 'some-feature-id',
-      value: 123
-    });
-    
-    // Perform the action
-    // ...
-  };
-  
-  return (
-    <Button onPress={handleAction}>
-      Use Feature
-    </Button>
-  );
-}
-```
-
-## Project Structure
+Создай файл:
 
 ```text
-mobile/
-├── app/                 # Application code
-│   ├── components/      # Reusable components
-│   ├── screens/         # Screen components
-│   ├── navigation/      # Navigation configuration
-│   ├── hooks/           # Custom hooks
-│   ├── utils/           # Utility functions
-│   └── services/        # API services
-├── assets/              # Static assets
-├── .env.example         # Example environment variables
-├── app.config.js        # Expo configuration (entry point)
-├── app.config.ts        # Expo configuration (the actual config)
-└── tamagui.config.ts    # Tamagui configuration
+apps/mobile/.env
 ```
 
-## Environment Setup
-
-1. Copy `.env.example` to `.env`
-2. Update the environment variables as needed:
+Минимальный набор:
 
 ```env
-API_URL=http://localhost:3000
-CLERK_PUBLISHABLE_KEY=your_clerk_key
+EXPO_PUBLIC_API_URL=http://10.0.2.2:3001
+EXPO_PUBLIC_TRPC_URL=http://10.0.2.2:3001/trpc
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_xxx
+EXPO_PUBLIC_POSTHOG_KEY=
+EXPO_PUBLIC_POSTHOG_HOST=https://app.posthog.com
 ```
 
-## Tamagui Theming
+Для Android Emulator используй `10.0.2.2`, потому что `localhost` внутри emulator указывает на сам emulator.
 
-The app uses Tamagui for a consistent UI experience. The theme is configured in `tamagui.config.ts`:
+Для физического телефона используй IP компьютера в локальной сети:
 
-```tsx
-// Customize theme colors, fonts, and other properties
-const tamaguiConfig = createTamagui({
-  ...defaultConfig,
-  fonts: {
-    ...defaultConfig.fonts,
-    heading: interFont,
-    body: interFont,
-  },
-  // Add custom themes and tokens here
-});
+```env
+EXPO_PUBLIC_API_URL=http://192.168.0.10:3001
+EXPO_PUBLIC_TRPC_URL=http://192.168.0.10:3001/trpc
 ```
 
-## Known Issues
+## Проверка перед demo
 
-- Expo SDK 52 is not compatible with React 18. We will use React 19 when we upgrade to Expo SDK 53 (in May 2025).
+```powershell
+pnpm --filter @repo/mobile type-check
+pnpm dev:mobile
+```
 
-## Adding New Features
+Backend должен быть запущен и доступен по `EXPO_PUBLIC_API_URL`.
 
-1. Create screen components in `app/screens/`
-2. Add navigation in `app/navigation/`
-3. Connect to backend APIs using tRPC procedures
-4. Use Tamagui components for consistent UI
-5. Add analytics tracking for important user actions
+## Основной demo flow
+
+### 1. Auth
+
+1. Открыть приложение.
+2. Зарегистрироваться или войти через email.
+3. Если Clerk требует код, ввести email code.
+4. Проверить, что после входа открывается student app.
+
+### 2. Profile and verification
+
+1. Открыть профиль.
+2. Загрузить аватарку.
+3. Перейти в “Заполнить / обновить профиль”.
+4. Заполнить обязательные поля.
+5. Сохранить профиль.
+6. Загрузить PDF электронного студенческого.
+7. Проверить статус заявки.
+8. Открыть текущий PDF.
+
+### 3. Catalog
+
+1. Открыть каталог.
+2. Проверить поиск.
+3. Проверить категории.
+4. Открыть карточку скидки.
+5. Добавить скидку в избранное.
+6. Открыть страницу избранного.
+
+### 4. QR
+
+1. Открыть скидку.
+2. Нажать “Получить QR”.
+3. Проверить QR details:
+   - QR виден только для активного кода
+   - raw token не показывается
+   - есть срок действия
+   - есть инструкция и предупреждение безопасности
+4. После подтверждения QR сотрудником обновить экран.
+5. Проверить, что QR скрыт и статус стал “Использован”.
+
+### 5. Review
+
+1. После used QR открыть QR details.
+2. Оставить рейтинг и комментарий.
+3. Проверить, что повторно форма не появляется, а отображается сохраненный отзыв.
+
+### 6. Wallet and notifications
+
+1. Открыть кошелек.
+2. Проверить бонусы, рефералы и историю операций.
+3. Открыть уведомления.
+4. Проверить фильтр “Все / Непрочитанные”.
+5. Отметить уведомления прочитанными.
+
+## Production UX notes
+
+- Ошибки показываются через normalized `ErrorStateView`.
+- Empty states содержат понятное действие: открыть каталог, сбросить фильтры, показать все уведомления.
+- QR token скрыт от пользователя.
+- PDF открывается через backend-protected endpoint и Clerk token.
+- Staff app пока не входит в client mobile scope.
