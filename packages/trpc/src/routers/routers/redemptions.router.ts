@@ -6,6 +6,7 @@ import {
   PartnerMember,
   PartnerMemberRole,
   StudentProfile,
+  StudentVerificationStatus,
   UniversityEmailDomain,
   UniversityStatus,
   User,
@@ -57,7 +58,7 @@ export class RedemptionsRouter {
     return parts[1];
   }
 
-  private async requireAllowedStudentEmailDomain(user: User): Promise<void> {
+  private async requireVerifiedStudentProfile(user: User): Promise<void> {
     const domain = this.getEmailDomain(user.email);
 
     const allowedDomain = await this.universityEmailDomainsRepo.findOne({
@@ -77,7 +78,7 @@ export class RedemptionsRouter {
       throw new TRPCError({
         code: "FORBIDDEN",
         message:
-          "Only approved student email domains are allowed to get QR codes",
+          "QR доступен только студентам с разрешённой студенческой почтой.",
       });
     }
 
@@ -85,10 +86,64 @@ export class RedemptionsRouter {
       where: { userId: user.id },
     });
 
-    if (studentProfile && studentProfile.studentEmail !== user.email) {
+    if (!studentProfile) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Заполните профиль студента и отправьте документ на проверку перед получением QR.",
+      });
+    }
+
+    if (studentProfile.studentEmail !== user.email) {
       studentProfile.studentEmail = user.email;
       studentProfile.universityId = allowedDomain.universityId;
       await this.studentProfilesRepo.save(studentProfile);
+    }
+
+    if (studentProfile.verificationStatus === StudentVerificationStatus.PENDING_REVIEW) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Ваш студенческий статус ещё на проверке. QR станет доступен после подтверждения администратором.",
+      });
+    }
+
+    if (studentProfile.verificationStatus === StudentVerificationStatus.REJECTED) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Ваша заявка на подтверждение студенческого статуса отклонена. Обновите данные и отправьте документ повторно.",
+      });
+    }
+
+    if (studentProfile.verificationStatus === StudentVerificationStatus.EXPIRED) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Подтверждение студенческого статуса истекло. Пройдите проверку повторно.",
+      });
+    }
+
+    if (studentProfile.verificationStatus !== StudentVerificationStatus.VERIFIED) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "QR доступен только после подтверждения студенческого статуса администратором.",
+      });
+    }
+
+    if (
+      studentProfile.verificationExpiresAt &&
+      studentProfile.verificationExpiresAt.getTime() < Date.now()
+    ) {
+      studentProfile.verificationStatus = StudentVerificationStatus.EXPIRED;
+      await this.studentProfilesRepo.save(studentProfile);
+
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Подтверждение студенческого статуса истекло. Пройдите проверку повторно.",
+      });
     }
   }
 
@@ -198,7 +253,7 @@ export class RedemptionsRouter {
           });
         }
 
-        await this.requireAllowedStudentEmailDomain(user);
+        await this.requireVerifiedStudentProfile(user);
 
         try {
           return await this.redemptionsService.createRedemption({

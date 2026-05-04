@@ -20,6 +20,7 @@ import { AppIcon } from "../../../shared/ui/AppIcon";
 import { useFavoriteOfferIds } from "../api/useFavoriteOfferIds";
 import { useOfferDetails } from "../api/useOfferDetails";
 import { useToggleFavorite } from "../api/useToggleFavorite";
+import { useMyProfile } from "../../profile/api/useMyProfile";
 import {
   readCoverUrl,
   readLocationId,
@@ -36,8 +37,92 @@ import { OfferTermsCard } from "../ui/OfferTermsCard";
 
 type Props = NativeStackScreenProps<StudentStackParamList, "OfferDetails">;
 
+type VerificationGate = {
+  canCreateQr: boolean;
+  message: string;
+};
+
+function buildVerificationGate(profile: unknown): VerificationGate {
+  const record =
+    typeof profile === "object" && profile !== null
+      ? (profile as Record<string, unknown>)
+      : null;
+
+  const domainCheck =
+    typeof record?.allowedStudentEmailDomain === "object" &&
+    record.allowedStudentEmailDomain !== null
+      ? (record.allowedStudentEmailDomain as Record<string, unknown>)
+      : null;
+
+  if (domainCheck?.isAllowed !== true) {
+    return {
+      canCreateQr: false,
+      message:
+        "QR доступен только студентам с разрешённой студенческой почтой.",
+    };
+  }
+
+  const studentProfile =
+    typeof record?.studentProfile === "object" && record.studentProfile !== null
+      ? (record.studentProfile as Record<string, unknown>)
+      : null;
+
+  const verificationStatus =
+    typeof studentProfile?.verificationStatus === "string"
+      ? studentProfile.verificationStatus
+      : "unverified";
+
+  if (verificationStatus === "pending_review") {
+    return {
+      canCreateQr: false,
+      message: "Документ на проверке. QR станет доступен после approve.",
+    };
+  }
+
+  if (verificationStatus === "rejected") {
+    return {
+      canCreateQr: false,
+      message:
+        "Студенческий статус отклонён. Обнови профиль и отправь документ повторно.",
+    };
+  }
+
+  if (verificationStatus === "expired") {
+    return {
+      canCreateQr: false,
+      message: "Подтверждение истекло. Пройди проверку повторно.",
+    };
+  }
+
+  const expiresAt =
+    typeof studentProfile?.verificationExpiresAt === "string" ||
+    studentProfile?.verificationExpiresAt instanceof Date
+      ? new Date(studentProfile.verificationExpiresAt).getTime()
+      : null;
+
+  if (verificationStatus === "verified" && expiresAt && expiresAt < Date.now()) {
+    return {
+      canCreateQr: false,
+      message: "Подтверждение истекло. Пройди проверку повторно.",
+    };
+  }
+
+  if (verificationStatus !== "verified") {
+    return {
+      canCreateQr: false,
+      message: "QR доступен только после подтверждения студенческого статуса.",
+    };
+  }
+
+  return {
+    canCreateQr: true,
+    message: "Студенческий статус подтверждён. QR доступен.",
+  };
+}
+
 export function OfferDetailsScreen({ navigation, route }: Props) {
   const offerQuery = useOfferDetails(route.params.slug);
+  const profileQuery = useMyProfile();
   const favoriteOfferIdsQuery = useFavoriteOfferIds();
   const toggleFavoriteMutation = useToggleFavorite();
   const createRedemptionMutation = useCreateRedemption();
@@ -50,6 +135,8 @@ export function OfferDetailsScreen({ navigation, route }: Props) {
   const favoriteIds = favoriteOfferIdsQuery.data ?? [];
   const isFavorite = offer ? favoriteIds.includes(offer.id) : false;
   const locations = offer ? readOfferLocationItems(offer) : [];
+  const verificationGate = buildVerificationGate(profileQuery.data);
+  const canCreateQr = verificationGate.canCreateQr;
 
   useEffect(() => {
     if (!offer) {
@@ -82,6 +169,11 @@ export function OfferDetailsScreen({ navigation, route }: Props) {
     }
 
     setActionError(null);
+
+    if (!canCreateQr) {
+      setActionError(verificationGate.message);
+      return;
+    }
 
     if (locations.length > 0 && !selectedLocationId) {
       setActionError("Выбери филиал, чтобы получить QR для этого предложения.");
@@ -192,6 +284,18 @@ export function OfferDetailsScreen({ navigation, route }: Props) {
               {readOfferDescription(offer)}
             </AppText>
 
+            {!profileQuery.isLoading && !canCreateQr ? (
+              <AppText color={colors.danger} style={styles.actionError}>
+                {verificationGate.message}
+              </AppText>
+            ) : null}
+
+            {profileQuery.isLoading ? (
+              <AppText color={colors.textSoft} style={styles.actionError}>
+                Проверяем студенческий статус...
+              </AppText>
+            ) : null}
+
             {actionError ? (
               <AppText color={colors.danger} style={styles.actionError}>
                 {actionError}
@@ -203,7 +307,11 @@ export function OfferDetailsScreen({ navigation, route }: Props) {
               icon="qr-code-outline"
               fullWidth
               loading={createRedemptionMutation.isPending}
-              disabled={createRedemptionMutation.isPending}
+              disabled={
+                createRedemptionMutation.isPending ||
+                profileQuery.isLoading ||
+                !canCreateQr
+              }
               style={styles.action}
               onPress={handleCreateQr}
             />
