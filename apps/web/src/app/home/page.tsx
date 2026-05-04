@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { type JSX, useMemo, useState } from "react";
+import { type JSX, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/utils/trpc";
 
@@ -31,16 +31,7 @@ type OfferCard = {
   } | null;
 };
 
-const quickCategories = [
-  "Все",
-  "Кафе",
-  "Фастфуд",
-  "Книги",
-  "Техника",
-  "Образование",
-  "Сервисы",
-];
-
+const ALL_CATEGORIES_LABEL = "Все";
 
 function formatBenefit(offer: OfferCard): string {
   if (offer.discountType === "percent" && offer.discountValue) {
@@ -75,13 +66,30 @@ function getUniqueOffers(offers: OfferCard[]): OfferCard[] {
   });
 }
 
+function getCategoryOptions(offers: OfferCard[]): string[] {
+  const categories = new Set<string>();
+
+  for (const offer of offers) {
+    const categoryName = offer.category?.name?.trim();
+
+    if (categoryName) {
+      categories.add(categoryName);
+    }
+  }
+
+  return [
+    ALL_CATEGORIES_LABEL,
+    ...Array.from(categories).sort((a, b) => a.localeCompare(b, "ru")),
+  ];
+}
+
 function matchesFilters(
   offer: OfferCard,
   selectedCategory: string,
   searchQuery: string
 ): boolean {
   const categoryMatches =
-    selectedCategory === "Все" ||
+    selectedCategory === ALL_CATEGORIES_LABEL ||
     offer.category?.name?.toLowerCase() === selectedCategory.toLowerCase();
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -194,6 +202,7 @@ function OfferCardView({ offer }: { offer: OfferCard }): JSX.Element {
     </Link>
   );
 }
+
 function LoadingOfferGrid(): JSX.Element {
   return (
     <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -203,6 +212,7 @@ function LoadingOfferGrid(): JSX.Element {
 
           <div className="mt-5 flex items-center gap-3">
             <div className="ub-skeleton h-11 w-11 rounded-2xl" />
+
             <div className="min-w-0 flex-1">
               <div className="ub-skeleton h-3 w-24 rounded-full" />
               <div className="ub-skeleton mt-3 h-4 w-4/5 rounded-full" />
@@ -263,7 +273,9 @@ function ErrorState({ message }: { message: string }): JSX.Element {
 export default function HomePage(): JSX.Element {
   const trpc = useTRPC();
 
-  const [selectedCategory, setSelectedCategory] = useState("Все");
+  const [selectedCategory, setSelectedCategory] = useState(
+    ALL_CATEGORIES_LABEL
+  );
   const [searchQuery, setSearchQuery] = useState("");
 
   const homeOffersQuery = useQuery({
@@ -285,6 +297,18 @@ export default function HomePage(): JSX.Element {
     () => getUniqueOffers([...featuredOffers, ...newOffers]),
     [featuredOffers, newOffers]
   );
+
+  const categoryOptions = useMemo(
+    () => getCategoryOptions(allOffers),
+    [allOffers]
+  );
+
+  useEffect(() => {
+    if (!categoryOptions.includes(selectedCategory)) {
+      setSelectedCategory(ALL_CATEGORIES_LABEL);
+    }
+  }, [categoryOptions, selectedCategory]);
+
   const filteredFeaturedOffers = useMemo(
     () =>
       featuredOffers.filter((offer) =>
@@ -302,9 +326,11 @@ export default function HomePage(): JSX.Element {
   );
 
   const totalOffers = allOffers.length;
+
   const partnerCount = new Set(
     allOffers.map((offer) => offer.partner?.id ?? offer.partner?.brandName)
   ).size;
+
   const categoryCount = new Set(
     allOffers.map((offer) => offer.category?.name).filter(Boolean)
   ).size;
@@ -394,7 +420,7 @@ export default function HomePage(): JSX.Element {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {quickCategories.map((category) => {
+            {categoryOptions.map((category) => {
               const isActive = selectedCategory === category;
 
               return (
