@@ -52,7 +52,7 @@ function formatBenefit(offer: OfferCard): string {
   }
 
   if (offer.cashbackPercent) {
-    return `${Number(offer.cashbackPercent).toFixed(0)}% cashback`;
+    return `${Number(offer.cashbackPercent).toFixed(0)}% кэшбэк`;
   }
 
   if (offer.bonusRewardPoints) {

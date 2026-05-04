@@ -49,7 +49,7 @@ export class AdminStudentVerificationsRouter {
     if (!ctx.auth.userId) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
-        message: "Authenticated Clerk user ID is missing",
+        message: "Не найден идентификатор авторизованного пользователя",
       });
     }
 
@@ -114,7 +114,7 @@ export class AdminStudentVerificationsRouter {
     if (!roles.includes("admin") && !roles.includes("super_admin")) {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: "Admin access is required",
+        message: "Требуется доступ администратора",
       });
     }
 
@@ -320,14 +320,14 @@ export class AdminStudentVerificationsRouter {
     if (!verification) {
       throw new TRPCError({
         code: "NOT_FOUND",
-        message: "Student verification request not found",
+        message: "Заявка на проверку студента не найдена",
       });
     }
 
     if (!verification.studentProfile) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: "Student profile is missing for this verification request",
+        message: "Для этой заявки не найден профиль студента",
       });
     }
 
@@ -405,7 +405,7 @@ export class AdminStudentVerificationsRouter {
         if (verification.status !== StudentVerificationRequestStatus.PENDING) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Only pending verification requests can be approved",
+            message: "Подтвердить можно только заявку со статусом «На проверке»",
           });
         }
 
@@ -450,7 +450,7 @@ export class AdminStudentVerificationsRouter {
         if (verification.status !== StudentVerificationRequestStatus.PENDING) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Only pending verification requests can be rejected",
+            message: "Отклонить можно только заявку со статусом «На проверке»",
           });
         }
 

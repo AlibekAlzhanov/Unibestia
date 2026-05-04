@@ -31,7 +31,7 @@ export function formatDate(value: string | Date | null | undefined): string {
     return "—";
   }
 
-  return new Date(value).toLocaleString();
+  return new Date(value).toLocaleString("ru-RU");
 }
 
 export function statusLabel(status: string): string {
@@ -86,9 +86,9 @@ export function checkClassName(status: "pass" | "warning" | "fail"): string {
 
 export function recommendationLabel(value: string): string {
   const labels: Record<string, string> = {
-    approve: "Рекомендуется approve",
+    approve: "Рекомендуется подтвердить",
     manual_review: "Нужна ручная проверка",
-    reject: "Рекомендуется reject",
+    reject: "Рекомендуется отклонить",
   };
 
   return labels[value] ?? value;

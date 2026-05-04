@@ -51,7 +51,7 @@ export class RedemptionsRouter {
     if (parts.length !== 2 || !parts[1]) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: "Invalid user email",
+        message: "Некорректный email пользователя",
       });
     }
 
@@ -166,7 +166,7 @@ export class RedemptionsRouter {
     if (!ctx.auth.userId) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
-        message: "Authenticated Clerk user ID is missing",
+        message: "Не найден идентификатор авторизованного пользователя",
       });
     }
 
@@ -175,7 +175,7 @@ export class RedemptionsRouter {
     if (!user) {
       throw new TRPCError({
         code: "NOT_FOUND",
-        message: "Application user not found for current Clerk account",
+        message: "Пользователь приложения для текущего аккаунта не найден",
       });
     }
 
@@ -209,7 +209,7 @@ export class RedemptionsRouter {
     if (qrMemberships.length === 0) {
       throw new TRPCError({
         code: "FORBIDDEN",
-        message: "Partner staff or admin access is required for QR operations",
+        message: "Для операций с QR нужен доступ сотрудника партнёра или администратора",
       });
     }
 
@@ -217,7 +217,7 @@ export class RedemptionsRouter {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message:
-          "QR operator has multiple active partner memberships. Only one active partner is allowed.",
+          "У оператора QR найдено несколько активных партнёрств. Допускается только одно активное партнёрство.",
       });
     }
 
@@ -240,7 +240,7 @@ export class RedemptionsRouter {
         if (!ctx.auth.userId) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
-            message: "Authenticated Clerk user ID is missing",
+            message: "Не найден идентификатор авторизованного пользователя",
           });
         }
 
@@ -249,7 +249,7 @@ export class RedemptionsRouter {
         if (!user) {
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Application user not found for current Clerk account",
+            message: "Пользователь приложения для текущего аккаунта не найден",
           });
         }
 
@@ -278,7 +278,7 @@ export class RedemptionsRouter {
 
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to create redemption",
+            message: "Не удалось создать QR-код",
           });
         }
       }),
@@ -296,7 +296,7 @@ export class RedemptionsRouter {
         if (!ctx.auth.userId) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
-            message: "Authenticated Clerk user ID is missing",
+            message: "Не найден идентификатор авторизованного пользователя",
           });
         }
 
@@ -305,7 +305,7 @@ export class RedemptionsRouter {
         if (!user) {
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Application user not found for current Clerk account",
+            message: "Пользователь приложения для текущего аккаунта не найден",
           });
         }
 
@@ -326,7 +326,7 @@ export class RedemptionsRouter {
         if (!ctx.auth.userId) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
-            message: "Authenticated Clerk user ID is missing",
+            message: "Не найден идентификатор авторизованного пользователя",
           });
         }
 
@@ -335,7 +335,7 @@ export class RedemptionsRouter {
         if (!user) {
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Application user not found for current Clerk account",
+            message: "Пользователь приложения для текущего аккаунта не найден",
           });
         }
 
@@ -357,7 +357,7 @@ export class RedemptionsRouter {
             message:
               error instanceof Error
                 ? error.message
-                : "Failed to load redemption",
+                : "Не удалось загрузить QR-код",
           });
         }
       }),
@@ -393,7 +393,7 @@ export class RedemptionsRouter {
 
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to validate QR token",
+            message: "Не удалось проверить QR-токен",
           });
         }
       }),
@@ -435,7 +435,7 @@ export class RedemptionsRouter {
 
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to confirm QR token",
+            message: "Не удалось подтвердить QR-токен",
           });
         }
       }),
@@ -471,7 +471,7 @@ export class RedemptionsRouter {
 
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to cancel QR token",
+            message: "Не удалось отменить QR-токен",
           });
         }
       }),

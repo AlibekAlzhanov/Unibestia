@@ -138,7 +138,7 @@ export class StudentVerificationDocumentsController {
 
     if (!studentProfile) {
       throw new BadRequestException(
-        "Fill student profile before uploading verification document"
+        "Заполните профиль студента перед загрузкой документа для проверки"
       );
     }
 
@@ -148,11 +148,11 @@ export class StudentVerificationDocumentsController {
       studentProfile.verificationStatus ===
       StudentVerificationStatus.PENDING_REVIEW
     ) {
-      throw new ConflictException("Verification request is already pending");
+      throw new ConflictException("Заявка на проверку уже ожидает решения");
     }
 
     if (studentProfile.verificationStatus === StudentVerificationStatus.VERIFIED) {
-      throw new ConflictException("Student profile is already verified");
+      throw new ConflictException("Студенческий статус уже подтверждён");
     }
 
     this.assertPdfFile(file);
@@ -208,15 +208,15 @@ export class StudentVerificationDocumentsController {
     });
 
     if (!verification) {
-      throw new NotFoundException("Verification document not found");
+      throw new NotFoundException("Документ проверки не найден");
     }
 
     if (verification.userId !== user.id && !(await this.isAdmin(user.id))) {
-      throw new ForbiddenException("You are not allowed to access this document");
+      throw new ForbiddenException("У вас нет доступа к этому документу");
     }
 
     if (!verification.documentUrl?.startsWith("r2://")) {
-      throw new NotFoundException("Verification document file is missing");
+      throw new NotFoundException("Файл документа проверки отсутствует");
     }
 
     const storageKey = verification.documentUrl.replace("r2://", "");
@@ -226,7 +226,7 @@ export class StudentVerificationDocumentsController {
     try {
       storedObject = await this.storageService.getObject(storageKey);
     } catch {
-      throw new NotFoundException("Verification document file is missing");
+      throw new NotFoundException("Файл документа проверки отсутствует");
     }
 
     res.setHeader("Content-Type", "application/pdf");
@@ -251,7 +251,7 @@ export class StudentVerificationDocumentsController {
     const user = await this.requireCurrentLocalUser(req);
 
     if (!(await this.isAdmin(user.id))) {
-      throw new ForbiddenException("Only admins can analyze verification documents");
+      throw new ForbiddenException("Анализ документов доступен только администраторам");
     }
 
     const verification = await this.studentVerificationsRepo.findOne({
@@ -266,11 +266,11 @@ export class StudentVerificationDocumentsController {
     });
 
     if (!verification) {
-      throw new NotFoundException("Verification document not found");
+      throw new NotFoundException("Документ проверки не найден");
     }
 
     if (!verification.documentUrl?.startsWith("r2://")) {
-      throw new NotFoundException("Verification document file is missing");
+      throw new NotFoundException("Файл документа проверки отсутствует");
     }
 
     const storageKey = verification.documentUrl.replace("r2://", "");
@@ -280,7 +280,7 @@ export class StudentVerificationDocumentsController {
     try {
       storedObject = await this.storageService.getObject(storageKey);
     } catch {
-      throw new NotFoundException("Verification document file is missing");
+      throw new NotFoundException("Файл документа проверки отсутствует");
     }
 
     let parsedPdf: PdfParseResult;
@@ -289,14 +289,14 @@ export class StudentVerificationDocumentsController {
       parsedPdf = await pdfParse(storedObject.body);
     } catch (error) {
       this.logger.error(
-        "Student verification PDF parse failed",
+        "Не удалось разобрать PDF студенческой проверки",
         error instanceof Error ? error.stack : String(error)
       );
 
       throw new BadRequestException(
         error instanceof Error
-          ? `Unable to extract text from PDF document: ${error.message}`
-          : "Unable to extract text from PDF document"
+          ? `Не удалось извлечь текст из PDF-документа: ${error.message}`
+          : "Не удалось извлечь текст из PDF-документа"
       );
     }
 
@@ -327,32 +327,32 @@ export class StudentVerificationDocumentsController {
 
     addCheck({
       code: "pdf_text_layer",
-      label: "PDF text layer",
+      label: "Текстовый слой PDF",
       status: input.extractedText.trim().length >= 30 ? "pass" : "fail",
       message:
         input.extractedText.trim().length >= 30
-          ? "PDF contains extractable text."
-          : "PDF text layer is empty or unreadable.",
+          ? "PDF содержит извлекаемый текст."
+          : "Текстовый слой PDF is empty or unreadable.",
       score: 15,
     });
 
     addCheck({
       code: "student_card_template",
-      label: "Student card template",
+      label: "Шаблон студенческого билета",
       status: fields.hasStudentCardTitle ? "pass" : "warning",
       message: fields.hasStudentCardTitle
-        ? "Student card title or expected labels were found."
-        : "Student card title was not found, but fields may still be readable.",
+        ? "Найдены заголовок студенческого билета или ожидаемые поля."
+        : "Заголовок студенческого билета не найден, но поля могут быть читаемыми.",
       score: 15,
     });
 
     addCheck({
       code: "full_name_detected",
-      label: "Full name detected",
+      label: "ФИО найдено",
       status: fields.fullName ? "pass" : "fail",
       message: fields.fullName
-        ? `Detected full name: ${fields.fullName}`
-        : "Full name was not detected.",
+        ? `Найдено ФИО: ${fields.fullName}`
+        : "ФИО не найдено.",
       score: 15,
     });
 
@@ -364,27 +364,27 @@ export class StudentVerificationDocumentsController {
 
     addCheck({
       code: "full_name_matches_profile",
-      label: "Full name matches profile",
+      label: "ФИО совпадает с профилем",
       status: !fields.fullName
         ? "warning"
         : profileNameMatches
           ? "pass"
           : "warning",
       message: !fields.fullName
-        ? "Cannot compare name because parser did not detect it."
+        ? "Невозможно сравнить ФИО, потому что parser не нашёл его."
         : profileNameMatches
-          ? "Detected name matches student profile."
-          : "Detected name does not fully match profile. Manual review is recommended.",
+          ? "Найденное ФИО совпадает с профилем студента."
+          : "Найденное ФИО не полностью совпадает с профилем. Рекомендуется ручная проверка.",
       score: 10,
     });
 
     addCheck({
       code: "university_detected",
-      label: "University detected",
+      label: "Университет найден",
       status: fields.university ? "pass" : "fail",
       message: fields.university
-        ? `Detected university: ${fields.university}`
-        : "University was not detected.",
+        ? `Найден университет: ${fields.university}`
+        : "Университет не найден.",
       score: 15,
     });
 
@@ -396,27 +396,27 @@ export class StudentVerificationDocumentsController {
 
     addCheck({
       code: "university_matches_profile",
-      label: "University matches profile",
+      label: "Университет совпадает с профилем",
       status: !fields.university
         ? "warning"
         : universityMatches
           ? "pass"
           : "warning",
       message: !fields.university
-        ? "Cannot compare university because it was not detected."
+        ? "Невозможно сравнить университет, потому что он не найден."
         : universityMatches
-          ? "Detected university matches profile."
-          : "Detected university differs from profile. Manual review is recommended.",
+          ? "Найденный университет совпадает с профилем."
+          : "Найденный университет отличается от профиля. Рекомендуется ручная проверка.",
       score: 10,
     });
 
     addCheck({
       code: "degree_detected",
-      label: "Degree detected",
+      label: "Степень обучения найдена",
       status: fields.degree ? "pass" : "warning",
       message: fields.degree
-        ? `Detected degree: ${fields.degree}`
-        : "Academic degree was not detected.",
+        ? `Найдена степень обучения: ${fields.degree}`
+        : "Степень обучения не найдена.",
       score: 10,
     });
 
@@ -427,27 +427,27 @@ export class StudentVerificationDocumentsController {
 
     addCheck({
       code: "degree_matches_profile",
-      label: "Degree matches profile",
+      label: "Степень обучения совпадает с профилем",
       status: !fields.degree
         ? "warning"
         : degreeMatches
           ? "pass"
           : "warning",
       message: !fields.degree
-        ? "Cannot compare degree because it was not detected."
+        ? "Невозможно сравнить степень обучения, потому что она не найдена."
         : degreeMatches
-          ? "Detected degree matches profile."
-          : "Detected degree differs from profile. Manual review is recommended.",
+          ? "Найденная степень обучения совпадает с профилем."
+          : "Найденная степень обучения отличается от профиля. Рекомендуется ручная проверка.",
       score: 5,
     });
 
     addCheck({
       code: "program_group_detected",
-      label: "Program group detected",
+      label: "Группа образовательных программ найдена",
       status: fields.programGroup ? "pass" : "warning",
       message: fields.programGroup
-        ? `Detected program group: ${fields.programGroup}`
-        : "Program group was not detected.",
+        ? `Найдена группа образовательных программ: ${fields.programGroup}`
+        : "Группа образовательных программ не найдена.",
       score: 5,
     });
 
@@ -459,17 +459,17 @@ export class StudentVerificationDocumentsController {
 
     addCheck({
       code: "program_group_matches_profile",
-      label: "Program group matches profile",
+      label: "Группа образовательных программ совпадает с профилем",
       status: !fields.programGroup
         ? "warning"
         : programGroupMatches
           ? "pass"
           : "warning",
       message: !fields.programGroup
-        ? "Cannot compare program group because it was not detected."
+        ? "Невозможно сравнить группу образовательных программ, потому что она не найдена."
         : programGroupMatches
-          ? "Detected program group matches selected education program group."
-          : "Detected program group differs from selected profile program group. Manual review is recommended.",
+          ? "Найденная группа образовательных программ совпадает с выбранной программой."
+          : "Найденная группа образовательных программ отличается от выбранной в профиле. Рекомендуется ручная проверка.",
       score: 10,
     });
 
@@ -479,27 +479,27 @@ export class StudentVerificationDocumentsController {
 
     addCheck({
       code: "course_detected",
-      label: "Course detected",
+      label: "Курс найден",
       status: fields.course ? "pass" : "fail",
       message: fields.course
-        ? `Detected course: ${fields.course}`
-        : "Course was not detected.",
+        ? `Найден курс: ${fields.course}`
+        : "Курс не найден.",
       score: 10,
     });
 
     addCheck({
       code: "course_matches_profile",
-      label: "Course matches profile",
+      label: "Курс совпадает с профилем",
       status: !fields.course
         ? "warning"
         : profileCourse === fields.course
           ? "pass"
           : "warning",
       message: !fields.course
-        ? "Cannot compare course because it was not detected."
+        ? "Невозможно сравнить курс, потому что он не найден."
         : profileCourse === fields.course
-          ? "Detected course matches profile."
-          : "Detected course differs from profile. Manual review is recommended.",
+          ? "Найденный курс совпадает с профилем."
+          : "Найденный курс отличается от профиля. Рекомендуется ручная проверка.",
       score: 5,
     });
 
@@ -509,27 +509,27 @@ export class StudentVerificationDocumentsController {
 
     addCheck({
       code: "admission_date_detected",
-      label: "Admission date detected",
+      label: "Дата поступления найдена",
       status: fields.admissionDate ? "pass" : "warning",
       message: fields.admissionDate
-        ? `Detected admission date: ${fields.admissionDate}`
-        : "Admission date was not detected.",
+        ? `Найдена дата поступления: ${fields.admissionDate}`
+        : "Дата поступления не найдена.",
       score: 10,
     });
 
     addCheck({
       code: "admission_date_matches_profile",
-      label: "Admission date matches profile",
+      label: "Дата поступления совпадает с профилем",
       status: !fields.admissionDate
         ? "warning"
         : this.datesMatch(profileAdmissionDate, fields.admissionDate)
           ? "pass"
           : "warning",
       message: !fields.admissionDate
-        ? "Cannot compare admission date because it was not detected."
+        ? "Невозможно сравнить дату поступления, потому что она не найдена."
         : this.datesMatch(profileAdmissionDate, fields.admissionDate)
-          ? "Detected admission date matches profile."
-          : "Detected admission date differs from profile. Manual review is recommended.",
+          ? "Найденная дата поступления совпадает с профилем."
+          : "Найденная дата поступления отличается от профиля. Рекомендуется ручная проверка.",
       score: 5,
     });
 
@@ -580,14 +580,14 @@ export class StudentVerificationDocumentsController {
       })),
       summary:
         recommendation === "approve"
-          ? "Document structure and extracted fields look consistent with the student profile."
+          ? "Структура документа и найденные поля соответствуют профилю студента."
           : recommendation === "manual_review"
-            ? "Document has enough information, but some fields require manual review."
-            : "Document does not provide enough reliable evidence for automatic recommendation.",
+            ? "В документе достаточно данных, но некоторые поля требуют ручной проверки."
+            : "Документ не содержит достаточно надёжных данных для автоматической рекомендации.",
       suggestedApproveComment:
-        "AI/OCR assistant: student card data is readable and matches the profile.",
+        "Автоматическая проверка: данные студенческого билета читаются и совпадают с профилем.",
       suggestedRejectComment:
-        "AI/OCR assistant: document data is incomplete, unreadable, or does not match the profile.",
+        "Автоматическая проверка: данные документа неполные, не читаются или не совпадают с профилем.",
       debug: {
         maxScore,
         actualScore,
@@ -1279,19 +1279,19 @@ private profileDegreeMatchesDetectedDegree(
       : authHeaderValue;
 
     if (!authHeader) {
-      throw new UnauthorizedException("Authorization header is required");
+      throw new UnauthorizedException("Требуется заголовок авторизации");
     }
 
     const [type, token] = authHeader.split(" ");
 
     if (type !== "Bearer" || !token) {
-      throw new UnauthorizedException("Bearer token is required");
+      throw new UnauthorizedException("Требуется Bearer-токен");
     }
 
     const sessionId = this.extractSessionIdFromJwt(token);
 
     if (!sessionId) {
-      throw new UnauthorizedException("Invalid Clerk session token");
+      throw new UnauthorizedException("Некорректный токен сессии");
     }
 
     let clerkUser: Awaited<ReturnType<typeof clerkClient.users.getUser>>;
@@ -1300,7 +1300,7 @@ private profileDegreeMatchesDetectedDegree(
       const session = await clerkClient.sessions.getSession(sessionId);
 
       if (!session || session.status !== "active" || !session.userId) {
-        throw new UnauthorizedException("Clerk session is not active");
+        throw new UnauthorizedException("Сессия пользователя неактивна");
       }
 
       clerkUser = await clerkClient.users.getUser(session.userId);
@@ -1309,7 +1309,7 @@ private profileDegreeMatchesDetectedDegree(
         throw error;
       }
 
-      throw new UnauthorizedException("Unable to validate Clerk session");
+      throw new UnauthorizedException("Не удалось проверить сессию пользователя");
     }
 
     const localUser = await this.usersRepo.findOne({
@@ -1318,7 +1318,7 @@ private profileDegreeMatchesDetectedDegree(
 
     if (!localUser) {
       throw new BadRequestException(
-        "Local user was not found. Open and save profile first."
+        "Локальный пользователь не найден. Сначала откройте и сохраните профиль."
       );
     }
 
@@ -1358,7 +1358,7 @@ private profileDegreeMatchesDetectedDegree(
     const parts = normalizedEmail.split("@");
 
     if (parts.length !== 2 || !parts[1]) {
-      throw new BadRequestException("Invalid user email");
+      throw new BadRequestException("Некорректный email пользователя");
     }
 
     return parts[1];
@@ -1385,7 +1385,7 @@ private profileDegreeMatchesDetectedDegree(
       allowedDomain.university.status !== UniversityStatus.ACTIVE
     ) {
       throw new ForbiddenException(
-        "Only approved student email domains are allowed"
+        "Разрешены только подтверждённые студенческие email-домены"
       );
     }
 

@@ -79,7 +79,7 @@ export function VerificationHeader({
       <div className="relative grid gap-8 lg:grid-cols-[1fr_340px] lg:items-end">
         <div>
           <p className="mb-3 text-sm font-black uppercase tracking-[0.24em] text-[#FFB5A4]">
-            Admin Verification
+            Проверка заявок
           </p>
 
           <h1 className="max-w-3xl text-[34px] font-black leading-tight tracking-[-0.04em] md:text-5xl">
@@ -95,7 +95,7 @@ export function VerificationHeader({
 
         <div className="rounded-[28px] border border-white/15 bg-white/12 p-5 backdrop-blur-md">
           <p className="text-sm font-black uppercase tracking-[0.18em] text-[#FFB5A4]">
-            Status
+            Статус
           </p>
 
           <p className="mt-2 text-2xl font-black">
@@ -239,7 +239,7 @@ function VerificationAnalysisPanel({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
-            Reference-aware PDF Assistant
+            Автоматическая проверка PDF
           </p>
 
           <h3 className="mt-2 text-2xl font-black text-[#17384B]">
@@ -258,11 +258,11 @@ function VerificationAnalysisPanel({
               recommendationClass(analysis.recommendation),
             ].join(" ")}
           >
-            Recommendation: {analysis.recommendation}
+            Рекомендация: {analysis.recommendation}
           </span>
 
           <span className="rounded-2xl border border-[#E5ECE9] bg-white px-4 py-3 text-sm font-black text-[#17384B]">
-            Confidence: {analysis.confidence}%
+            Уверенность: {analysis.confidence}%
           </span>
 
           <span
@@ -271,7 +271,7 @@ function VerificationAnalysisPanel({
               riskClass(analysis.riskLevel),
             ].join(" ")}
           >
-            Risk: {analysis.riskLevel}
+            Риск: {analysis.riskLevel}
           </span>
         </div>
       </div>
@@ -313,7 +313,7 @@ function VerificationAnalysisPanel({
       {analysis.extractedFields.rawTextPreview && (
         <details className="mt-5 rounded-2xl border border-[#E5ECE9] bg-white p-4">
           <summary className="cursor-pointer text-sm font-black text-[#17384B]">
-            Показать OCR preview
+            Показать распознанный текст
           </summary>
 
           <p className="mt-3 whitespace-pre-line text-xs leading-6 text-[#6B7280]">
@@ -328,7 +328,7 @@ function VerificationAnalysisPanel({
           onClick={() => onInsertRejectReason(analysis.suggestedRejectComment)}
           className="mt-5 rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm font-black text-red-700 transition hover:bg-red-50"
         >
-          Вставить AI причину отказа
+          Вставить рекомендуемую причину отказа
         </button>
       )}
     </div>
@@ -391,7 +391,7 @@ export function VerificationCard({
             )}
 
             <span className="rounded-2xl bg-[#FFF0EB] px-3 py-1 text-xs font-black text-[#FF7F6E]">
-              ID: {item.id.slice(0, 8)}
+              Номер: {item.id.slice(0, 8)}
             </span>
           </div>
 
@@ -424,7 +424,7 @@ export function VerificationCard({
             disabled={!item.documentUrl || isAnalysisLoading}
             className="rounded-2xl border border-[#FFB5A4] bg-[#FFF7F4] px-5 py-3 text-sm font-black text-[#FF7F6E] transition hover:bg-[#FFE4DC] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isAnalysisLoading ? "Анализ..." : "AI/OCR анализ"}
+            {isAnalysisLoading ? "Идёт анализ..." : "Анализ PDF"}
           </button>
 
           {isPending(item) && (

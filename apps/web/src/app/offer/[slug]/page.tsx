@@ -184,7 +184,7 @@ function formatBenefit(offer: {
   }
 
   if (offer.cashbackPercent) {
-    return `${Number(offer.cashbackPercent).toFixed(0)}% cashback`;
+    return `${Number(offer.cashbackPercent).toFixed(0)}% кэшбэк`;
   }
 
   if (offer.bonusRewardPoints) {
@@ -589,7 +589,7 @@ export default function OfferDetailsPage(): JSX.Element {
               </div>
             ) : (
               <div className="flex h-72 items-center justify-center bg-[linear-gradient(135deg,#17384B_0%,#255B73_45%,#FF9F8A_100%)] text-center text-sm font-black uppercase tracking-[0.24em] text-white md:h-[440px]">
-                UniBestia Offer
+                Предложение UniBestia
               </div>
             )}
 

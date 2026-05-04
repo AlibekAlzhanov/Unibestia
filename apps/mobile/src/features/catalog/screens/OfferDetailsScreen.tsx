@@ -189,7 +189,7 @@ export function OfferDetailsScreen({ navigation, route }: Props) {
       const redemptionId = readRedemptionId(redemption);
 
       if (!redemptionId) {
-        setActionError("Backend создал QR, но не вернул id redemption.");
+        setActionError("Сервер создал QR, но не вернул идентификатор активации.");
         return;
       }
 

@@ -43,7 +43,7 @@ type SortMode = "recommended" | "biggest-discount" | "cashback" | "bonus";
 const sortOptions: Array<{ value: SortMode; label: string }> = [
   { value: "recommended", label: "Рекомендуемые" },
   { value: "biggest-discount", label: "Больше скидка" },
-  { value: "cashback", label: "Cashback" },
+  { value: "cashback", label: "Кэшбэк" },
   { value: "bonus", label: "Бонусы" },
 ];
 
@@ -57,7 +57,7 @@ function formatBenefit(offer: OfferCard): string {
   }
 
   if (offer.cashbackPercent) {
-    return `${Number(offer.cashbackPercent).toFixed(0)}% cashback`;
+    return `${Number(offer.cashbackPercent).toFixed(0)}% кэшбэк`;
   }
 
   if (offer.bonusRewardPoints) {
@@ -79,7 +79,7 @@ function getDiscountScore(offer: OfferCard): number {
   return 0;
 }
 
-function getCashbackScore(offer: OfferCard): number {
+function getКэшбэкScore(offer: OfferCard): number {
   return offer.cashbackPercent ? Number(offer.cashbackPercent) : 0;
 }
 
@@ -95,7 +95,7 @@ function sortOffers(offers: OfferCard[], sortMode: SortMode): OfferCard[] {
   }
 
   if (sortMode === "cashback") {
-    return copiedOffers.sort((a, b) => getCashbackScore(b) - getCashbackScore(a));
+    return copiedOffers.sort((a, b) => getКэшбэкScore(b) - getКэшбэкScore(a));
   }
 
   if (sortMode === "bonus") {
