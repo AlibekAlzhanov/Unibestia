@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { invalidateMobileQueries } from "../../../shared/api/invalidateMobileQueries";
 import { useTRPC } from "../../../shared/api/trpc";
 
 export function useMarkAllNotificationsAsRead() {
@@ -9,7 +10,7 @@ export function useMarkAllNotificationsAsRead() {
   return useMutation(
     trpc.notifications.markAllAsRead.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries();
+        await invalidateMobileQueries(queryClient, ["notifications"]);
       },
     })
   );

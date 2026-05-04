@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { invalidateMobileQueries } from "../../../shared/api/invalidateMobileQueries";
 import { useTRPC } from "../../../shared/api/trpc";
 
 export function useCreateRedemption() {
@@ -9,7 +10,11 @@ export function useCreateRedemption() {
   return useMutation(
     trpc.redemptions.create.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries();
+        await invalidateMobileQueries(queryClient, [
+          "redemptions",
+          "catalog",
+          "wallet",
+        ]);
       },
     })
   );

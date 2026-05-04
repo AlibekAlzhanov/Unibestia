@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { invalidateMobileQueries } from "../../../shared/api/invalidateMobileQueries";
 import { useTRPC } from "../../../shared/api/trpc";
 
 export function useToggleFavorite() {
@@ -9,7 +10,7 @@ export function useToggleFavorite() {
   return useMutation(
     trpc.catalog.toggleFavorite.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries();
+        await invalidateMobileQueries(queryClient, ["catalog"]);
       },
     })
   );

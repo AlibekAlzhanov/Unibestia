@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { invalidateMobileQueries } from "../../../shared/api/invalidateMobileQueries";
 import { useTRPC } from "../../../shared/api/trpc";
 
 export function useUpdateStudentProfile() {
@@ -9,7 +10,7 @@ export function useUpdateStudentProfile() {
   return useMutation(
     trpc.profile.upsertMyStudentProfile.mutationOptions({
       onSuccess: async () => {
-        await queryClient.invalidateQueries();
+        await invalidateMobileQueries(queryClient, ["profile"]);
       },
     })
   );
