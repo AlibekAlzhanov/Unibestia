@@ -49,6 +49,12 @@ export function isRedemptionUsed(redemption: unknown): boolean {
   return status === "used" || status.includes("used") || Boolean(readRedemptionUsedAt(redemption));
 }
 
+export function isRedemptionCancelled(redemption: unknown): boolean {
+  const status = readRedemptionStatus(redemption).toLowerCase();
+
+  return status.includes("cancel");
+}
+
 export function readRedemptionCode(redemption: unknown): string {
   const record = asRecord(redemption);
 
@@ -111,6 +117,13 @@ export function readOfferId(redemption: unknown): string | null {
   const offer = nested(record, "offer");
 
   return readString(offer?.id) ?? readString(record?.offerId);
+}
+
+export function readOfferSlug(redemption: unknown): string | null {
+  const record = asRecord(redemption);
+  const offer = nested(record, "offer");
+
+  return readString(offer?.slug) ?? readString(record?.offerSlug);
 }
 
 export function readOfferTitle(redemption: unknown): string {
@@ -180,6 +193,12 @@ export function readWalletPoints(redemption: unknown): number | null {
 }
 
 export function isRedemptionExpired(redemption: unknown): boolean {
+  const status = readRedemptionStatus(redemption).toLowerCase();
+
+  if (status.includes("expired")) {
+    return true;
+  }
+
   const expiresAt = readRedemptionExpiresAt(redemption);
 
   if (!expiresAt) {
@@ -189,6 +208,18 @@ export function isRedemptionExpired(redemption: unknown): boolean {
   const timestamp = new Date(expiresAt).getTime();
 
   return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
+
+export function isRedemptionFinal(redemption: unknown): boolean {
+  return (
+    isRedemptionUsed(redemption) ||
+    isRedemptionExpired(redemption) ||
+    isRedemptionCancelled(redemption)
+  );
+}
+
+export function canShowRedemptionQr(redemption: unknown): boolean {
+  return !isRedemptionFinal(redemption);
 }
 
 export function redemptionStatusLabel(redemption: unknown): string {

@@ -11,20 +11,16 @@ import { Screen } from "../../../shared/ui/Screen";
 import { ScreenHeader } from "../../../shared/ui/ScreenHeader";
 import { StateView } from "../../../shared/ui/StateView";
 import {
-  formatRedemptionDate,
   isRedemptionUsed,
   readOfferId,
-  readRedemptionCode,
-  readRedemptionExpiresAt,
+  readOfferSlug,
   readRedemptionId,
-  readRedemptionQrPayload,
-  redemptionStatusLabel,
 } from "../lib/redemptionLifecycleView";
 import { useRedemptionDetails } from "../api/useRedemptionDetails";
-import { QRCodePanel } from "../ui/QRCodePanel";
 import { RedemptionCountdownCard } from "../ui/RedemptionCountdownCard";
 import { RedemptionInfoCard } from "../ui/RedemptionInfoCard";
 import { RedemptionInstructionsCard } from "../ui/RedemptionInstructionsCard";
+import { RedemptionQrAccessPanel } from "../ui/RedemptionQrAccessPanel";
 
 type Props = NativeStackScreenProps<StudentStackParamList, "QrDetails">;
 
@@ -38,6 +34,7 @@ export function QRDetailsScreen({ navigation, route }: Props) {
   const refresh = useRefresh(refreshHandler);
 
   const redemption = redemptionQuery.data;
+  const offerSlug = readOfferSlug(redemption);
 
   return (
     <Screen scroll refreshing={refresh.refreshing} onRefresh={refresh.onRefresh}>
@@ -66,14 +63,15 @@ export function QRDetailsScreen({ navigation, route }: Props) {
         />
       ) : redemption ? (
         <View style={styles.content}>
-          <QRCodePanel
-            qrToken={
-              readRedemptionQrPayload(redemption) ||
-              readRedemptionCode(redemption) ||
-              route.params.redemptionId
+          <RedemptionQrAccessPanel
+            redemption={redemption}
+            fallbackRedemptionId={route.params.redemptionId}
+            onRefresh={() => redemptionQuery.refetch()}
+            onOpenOffer={
+              offerSlug
+                ? () => navigation.navigate("OfferDetails", { slug: offerSlug })
+                : undefined
             }
-            status={redemptionStatusLabel(redemption)}
-            expiresAt={formatRedemptionDate(readRedemptionExpiresAt(redemption))}
           />
 
           <RedemptionInfoCard redemption={redemption} />
