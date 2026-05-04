@@ -5,10 +5,12 @@ import { AdminStudentVerificationsRouter } from "./routers/admin-student-verific
 import { AuthRouter } from "./routers/auth.router.js";
 import { BusinessRouter } from "./routers/business.router.js";
 import { CatalogRouter } from "./routers/catalog.router.js";
+import { EducationProgramsRouter } from "./routers/education-programs.router.js";
 import { NotificationsRouter } from "./routers/notifications.router.js";
 import { ProfileRouter } from "./routers/profile.router.js";
 import { RedemptionsRouter } from "./routers/redemptions.router.js";
 import { ReferralsRouter } from "./routers/referrals.router.js";
+import { UniversitiesRouter } from "./routers/universities.router.js";
 import { WalletRouter } from "./routers/wallet.router.js";
 
 @Injectable()
@@ -22,7 +24,9 @@ export class AppRouterClass {
     private readonly businessRouter: BusinessRouter,
     private readonly notificationsRouter: NotificationsRouter,
     private readonly referralsRouter: ReferralsRouter,
-    private readonly adminStudentVerificationsRouter: AdminStudentVerificationsRouter
+    private readonly adminStudentVerificationsRouter: AdminStudentVerificationsRouter,
+    private readonly universitiesRouter: UniversitiesRouter,
+    private readonly educationProgramsRouter: EducationProgramsRouter
   ) {}
 
   public createRouter() {
@@ -36,6 +40,8 @@ export class AppRouterClass {
       notifications: this.notificationsRouter.router,
       referrals: this.referralsRouter.router,
       adminStudentVerifications: this.adminStudentVerificationsRouter.router,
+      universities: this.universitiesRouter.router,
+      educationPrograms: this.educationProgramsRouter.router,
     });
   }
 
