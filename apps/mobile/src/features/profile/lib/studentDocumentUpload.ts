@@ -81,11 +81,7 @@ export async function uploadStudentDocumentToBackend({
     } as unknown as Blob
   );
 
-  const uploadUrl = `${env.EXPO_PUBLIC_API_URL}/student-verifications/document`;
-
-  console.log("[mobile/student-document] upload:", uploadUrl);
-
-  const response = await fetch(uploadUrl, {
+  const response = await fetch(`${env.EXPO_PUBLIC_API_URL}/student-verifications/document`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -94,8 +90,6 @@ export async function uploadStudentDocumentToBackend({
   });
 
   const payload = (await response.json().catch(() => null)) as unknown;
-
-  console.log("[mobile/student-document] upload response:", payload);
 
   if (!response.ok) {
     throw new Error(

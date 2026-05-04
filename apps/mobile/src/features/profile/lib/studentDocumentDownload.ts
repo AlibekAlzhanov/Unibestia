@@ -32,9 +32,6 @@ export async function downloadAndOpenStudentDocument({
 
   const fileUri = `${cacheDirectory}${makeSafeFileName(verificationId)}`;
 
-  console.log("[mobile/student-document] download url:", url);
-  console.log("[mobile/student-document] local file:", fileUri);
-
   const downloadResult = await FileSystem.downloadAsync(url, fileUri, {
     headers: {
       Authorization: `Bearer ${token}`,

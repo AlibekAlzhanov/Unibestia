@@ -24,7 +24,6 @@ import {
   readLatestVerificationDocumentUrl,
   readLatestVerificationId,
   readLatestVerificationMethod,
-  readLatestVerificationRawDocumentUrl,
   readLatestVerificationReviewComment,
   readLatestVerificationStatus,
   verificationRequestStatusLabel,
@@ -54,7 +53,6 @@ export function StudentDocumentUploadCard({
   const latestStatus = readLatestVerificationStatus(profile);
   const latestMethod = readLatestVerificationMethod(profile);
   const latestDocumentUrl = readLatestVerificationDocumentUrl(profile);
-  const latestRawDocumentUrl = readLatestVerificationRawDocumentUrl(profile);
   const latestDocumentType = readLatestVerificationDocumentType(profile);
   const latestReviewComment = readLatestVerificationReviewComment(profile);
   const latestCreatedAt = readLatestVerificationCreatedAt(profile);
@@ -144,9 +142,6 @@ export function StudentDocumentUploadCard({
 
     setIsOpening(true);
 
-    console.log("[mobile/student-document] open raw url:", latestRawDocumentUrl);
-    console.log("[mobile/student-document] open download url:", latestDocumentUrl);
-
     try {
       const token = await getToken();
 
@@ -226,17 +221,6 @@ export function StudentDocumentUploadCard({
             <AppText>{formatVerificationDate(latestCreatedAt)}</AppText>
           </View>
         </View>
-
-        {latestRawDocumentUrl ? (
-          <View style={styles.urlBox}>
-            <AppText variant="caption" color={colors.muted}>
-              PDF endpoint
-            </AppText>
-            <AppText color={colors.textSoft} numberOfLines={2} style={styles.urlText}>
-              {latestDocumentUrl ?? latestRawDocumentUrl}
-            </AppText>
-          </View>
-        ) : null}
 
         {latestReviewComment ? (
           <View style={styles.reviewBox}>
@@ -367,15 +351,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.surface,
     padding: spacing.md,
-  },
-  urlBox: {
-    marginTop: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-  },
-  urlText: {
-    marginTop: spacing.xs,
   },
   reviewBox: {
     marginTop: spacing.md,
