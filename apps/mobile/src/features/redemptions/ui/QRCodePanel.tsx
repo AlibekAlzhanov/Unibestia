@@ -1,13 +1,11 @@
-import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import * as Clipboard from "expo-clipboard";
 import QRCode from "react-native-qrcode-svg";
 
 import { colors } from "../../../shared/theme/colors";
 import { radius } from "../../../shared/theme/radius";
 import { spacing } from "../../../shared/theme/spacing";
-import { AppButton } from "../../../shared/ui/AppButton";
 import { AppCard } from "../../../shared/ui/AppCard";
+import { AppIcon } from "../../../shared/ui/AppIcon";
 import { AppText } from "../../../shared/ui/AppText";
 import { IconBadge } from "../../../shared/ui/IconBadge";
 
@@ -18,17 +16,6 @@ type QRCodePanelProps = {
 };
 
 export function QRCodePanel({ qrToken, status, expiresAt }: QRCodePanelProps) {
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopy() {
-    await Clipboard.setStringAsync(qrToken);
-    setCopied(true);
-
-    setTimeout(() => {
-      setCopied(false);
-    }, 1800);
-  }
-
   return (
     <AppCard style={styles.card}>
       <View style={styles.qrBox}>
@@ -37,48 +24,52 @@ export function QRCodePanel({ qrToken, status, expiresAt }: QRCodePanelProps) {
 
       <View style={styles.titleRow}>
         <IconBadge name="qr-code-outline" tone="primary" />
+
         <View style={styles.titleText}>
           <AppText variant="subheading">QR-код для партнера</AppText>
           <AppText color={colors.textSoft} style={styles.description}>
-            Покажи этот QR сотруднику партнера для подтверждения скидки.
+            Покажи QR сотруднику партнера. Не отправляй код в чатах и не делай
+            скриншот для других людей.
           </AppText>
         </View>
       </View>
 
-      {status ? (
-        <View style={styles.metaRow}>
-          <AppText variant="caption" color={colors.muted}>
-            Статус
-          </AppText>
-          <AppText variant="caption">{status}</AppText>
-        </View>
-      ) : null}
+      <View style={styles.metaBox}>
+        {status ? (
+          <View style={styles.metaRow}>
+            <View style={styles.metaLabel}>
+              <AppIcon name="pulse-outline" size={16} color={colors.muted} />
+              <AppText variant="caption" color={colors.muted}>
+                Статус
+              </AppText>
+            </View>
 
-      {expiresAt ? (
-        <View style={styles.metaRow}>
-          <AppText variant="caption" color={colors.muted}>
-            Действует до
-          </AppText>
-          <AppText variant="caption">{expiresAt}</AppText>
-        </View>
-      ) : null}
+            <AppText variant="caption">{status}</AppText>
+          </View>
+        ) : null}
 
-      <View style={styles.tokenBox}>
-        <AppText variant="caption" color={colors.muted}>
-          QR token
-        </AppText>
-        <AppText numberOfLines={2} style={styles.token}>
-          {qrToken}
-        </AppText>
+        {expiresAt ? (
+          <View style={styles.metaRow}>
+            <View style={styles.metaLabel}>
+              <AppIcon name="time-outline" size={16} color={colors.muted} />
+              <AppText variant="caption" color={colors.muted}>
+                Действует до
+              </AppText>
+            </View>
+
+            <AppText variant="caption">{expiresAt}</AppText>
+          </View>
+        ) : null}
       </View>
 
-      <AppButton
-        title={copied ? "Скопировано" : "Скопировать token"}
-        icon={copied ? "checkmark-circle-outline" : "copy-outline"}
-        variant="secondary"
-        fullWidth
-        onPress={handleCopy}
-      />
+      <View style={styles.securityBox}>
+        <AppIcon name="lock-closed-outline" size={18} color={colors.primary} />
+
+        <AppText color={colors.textSoft} style={styles.securityText}>
+          В целях безопасности технический QR token скрыт. Для активации достаточно
+          показать QR-код на экране.
+        </AppText>
+      </View>
     </AppCard>
   );
 }
@@ -105,21 +96,34 @@ const styles = StyleSheet.create({
   description: {
     marginTop: spacing.xs,
   },
+  metaBox: {
+    marginTop: spacing.xl,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
   metaRow: {
-    marginTop: spacing.lg,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
   },
-  tokenBox: {
-    marginTop: spacing.xl,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceMuted,
-    padding: spacing.lg,
+  metaLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
-  token: {
-    marginTop: spacing.sm,
-    fontFamily: "monospace",
+  securityBox: {
+    marginTop: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSoft,
+    padding: spacing.md,
+    flexDirection: "row",
+    gap: spacing.md,
+    alignItems: "flex-start",
+  },
+  securityText: {
+    flex: 1,
   },
 });
